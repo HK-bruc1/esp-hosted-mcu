@@ -11,30 +11,13 @@
 
 // REMOVED: esp_wifi.h
 #include "h_transport_drv.h"
-#include "esp_hosted_transport.h"
-#include "esp_hosted_transport_init.h"
-#include "esp_hosted_transport_config.h"
-#include "esp_hosted_host_fw_ver.h"
-#include "stats.h"
-#include "esp_hosted_log.h"
-#include "serial_drv.h"
-#include "serial_ll_if.h"
-#include "stats.h"
-#include "errno.h"
-#include "hci_drv.h"
 #include "h_config.h"
-#include "esp_hosted_power_save.h"
-
-/* Legacy compatibility: g_h and config macros still referenced by
- * transport_util.h macros (MEMPOOL_ALLOC / MEMPOOL_FREE) and
- * h_transport_drv.c body.  Must be included BEFORE transport_util.h
- * so that H_USE_MEMPOOL is visible when transport_util.h is parsed.
- * These will be migrated to new framework symbols in WP 4.4. */
-#include "esp_hosted_os_abstraction.h"
-// REMOVED legacy includes
-
 #include "mempool.h"
 #include "transport_util.h"
+#include "esp_hosted_transport.h"
+#include "esp_hosted_transport_init.h"
+#include "esp_hosted_host_fw_ver.h"
+#include <errno.h>
 
 /* Transport-specific buffer size definitions (needed for 1600) */
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
@@ -138,7 +121,7 @@ void set_transport_state(uint8_t state)
 
 static void transport_drv_init(void)
 {
-	bus_handle = bus_init_internal();
+	h_transport_init(&bus_handle);
 	H_LOGD(TAG, "Bus handle: %p", bus_handle);
 	assert(bus_handle);
 #if H_NETWORK_SPLIT_ENABLED
@@ -148,7 +131,7 @@ static void transport_drv_init(void)
 		H_SLAVE_TCP_REMOTE_PORT_RANGE_START, H_SLAVE_TCP_REMOTE_PORT_RANGE_END,
 		H_SLAVE_UDP_REMOTE_PORT_RANGE_START, H_SLAVE_UDP_REMOTE_PORT_RANGE_END);
 #endif
-	hci_drv_init();
+	/* hci_drv_init() called by rpc_start() */
 }
 
 h_err_t teardown_transport(void)
@@ -161,13 +144,13 @@ h_err_t teardown_transport(void)
 	}
 	#endif
 
-	/* Stop CLI before tearing down transport */
+	/* Stop CLI if enabled */
 #ifdef H_ESP_HOSTED_CLI_ENABLED
-	esp_hosted_cli_stop();
+	/* TODO: move cli to port or core-utils */
 #endif
 
 	if (bus_handle) {
-		bus_deinit_internal(bus_handle);
+		h_transport_deinit(bus_handle);
 	}
 	H_LOGI(TAG, "TRANSPORT_INACTIVE");
 	transport_state = TRANSPORT_INACTIVE;
@@ -207,7 +190,7 @@ h_err_t transport_drv_reconfigure(void)
 #endif
 
 	int retry_power_save_recover = 5;
-	if (esp_hosted_woke_from_power_save()) {
+	if (h_woke_from_ps()) {
 		H_LOGI(TAG, "Waiting for power save to be off");
 		h_msleep(700);
 
@@ -222,8 +205,8 @@ h_err_t transport_drv_reconfigure(void)
 	/* This would come into picture, only if the host has
 	 * reset pin connected to slave's 'EN' or 'RST' GPIO */
 	if (!is_transport_tx_ready()) {
-		if (H_OK != ensure_slave_bus_ready(bus_handle)) {
-			H_LOGE(TAG, "ensure_slave_bus_ready failed");
+		if (H_OK != h_bus_ready(bus_handle)) {
+			H_LOGE(TAG, "h_bus_ready failed");
 			return H_FAIL;
 		}
 		transport_state = TRANSPORT_RX_ACTIVE;
@@ -233,8 +216,8 @@ h_err_t transport_drv_reconfigure(void)
 				retry_slave_connection++;
 				if (retry_slave_connection%50==0) {
 					H_LOGI(TAG, "Not able to connect with ESP-Hosted slave device");
-					if (H_OK != ensure_slave_bus_ready(bus_handle)) {
-						H_LOGE(TAG, "ensure_slave_bus_ready failed");
+					if (H_OK != h_bus_ready(bus_handle)) {
+						H_LOGE(TAG, "h_bus_ready failed");
 						return H_FAIL;
 					}
 				}
@@ -292,7 +275,7 @@ h_err_t transport_drv_remove_channel(transport_channel_t *channel)
 
 // reference count mempool allocations
 static int ref_count_mempool = 0;
-static hosted_mempool_t * mempool __attribute__((unused))_common = NULL;
+static hosted_mempool_t * mempool_common = NULL;
 
 static hosted_mempool_t * transport_drv_common_mempool_create(void)
 {
@@ -347,9 +330,10 @@ static void transport_serial_free_cb(void *buf)
 	MEMPOOL_FREE(chan_arr[ESP_SERIAL_IF]->memp, buf);
 }
 
-static inline void *mempool_alloc(hosted_mempool_t * mempool __attribute__((unused)), size_t size, unsigned int need_memset)
+static inline void *mempool_alloc(hosted_mempool_t * pool, size_t size, unsigned int need_memset)
 {
-	MEMPOOL_ALLOC(mempool, size, need_memset);
+	(void)pool;
+	MEMPOOL_ALLOC(pool, size, need_memset);
 }
 
 static h_err_t transport_drv_sta_tx(void *h, void *buffer, size_t len)
@@ -396,7 +380,7 @@ static h_err_t transport_drv_sta_tx(void *h, void *buffer, size_t len)
 	}
 	h_memcpy(copy_buff+H_ESP_PAYLOAD_HEADER_OFFSET, buffer, len);
 
-	return esp_hosted_tx(ESP_STA_IF, 0, copy_buff, len, H_BUFF_ZEROCOPY, copy_buff, transport_sta_free_cb, 0);
+	return h_transmit(ESP_STA_IF, 0, copy_buff, len, H_BUFF_ZEROCOPY, copy_buff, transport_sta_free_cb, 0);
 }
 
 static h_err_t transport_drv_ap_tx(void *h, void *buffer, size_t len)
@@ -431,7 +415,7 @@ static h_err_t transport_drv_ap_tx(void *h, void *buffer, size_t len)
 	}
 	h_memcpy(copy_buff+H_ESP_PAYLOAD_HEADER_OFFSET, buffer, len);
 
-	return esp_hosted_tx(ESP_AP_IF, 0, copy_buff, len, H_BUFF_ZEROCOPY, copy_buff, transport_ap_free_cb, 0);
+	return h_transmit(ESP_AP_IF, 0, copy_buff, len, H_BUFF_ZEROCOPY, copy_buff, transport_ap_free_cb, 0);
 }
 
 h_err_t transport_drv_serial_tx(void *h, void *buffer, size_t len)
@@ -449,7 +433,7 @@ h_err_t transport_drv_serial_tx(void *h, void *buffer, size_t len)
 #endif
 	}
 	assert(h && h==chan_arr[ESP_SERIAL_IF]->api_chan);
-	return esp_hosted_tx(ESP_SERIAL_IF, 0, buffer, len, H_BUFF_NO_ZEROCOPY, buffer, transport_serial_free_cb, 0);
+	return h_transmit(ESP_SERIAL_IF, 0, buffer, len, H_BUFF_NO_ZEROCOPY, buffer, transport_serial_free_cb, 0);
 }
 
 
@@ -610,16 +594,13 @@ static void process_event(uint8_t *evt_buf, uint16_t len)
 	if (event->event_type == ESP_PRIV_EVENT_INIT) {
 
 		H_LOGI(TAG, "Received INIT event from ESP32 peripheral");
-		ESP_HEXLOGD("Slave_init_evt", event->event_data, event->event_len, 32);
+		H_HEXLOGD("Slave_init_evt", event->event_data, event->event_len, 32);
 
 		ret = process_init_event(event->event_data, event->event_len);
 		if (ret) {
 			H_LOGE(TAG, "failed to init event\n\r");
 		} else {
-
-#if H_HOST_PS_ALLOWED && H_HOST_WAKEUP_GPIO
-			esp_hosted_power_save_init();
-#endif
+			h_ps_init();
 		}
 	} else {
 		H_LOGW(TAG, "Drop unknown event\n\r");
@@ -809,7 +790,7 @@ h_err_t send_slave_config(uint8_t host_cap, uint8_t firmware_chip_id,
 	/* payload len = Event len + sizeof(event type) + sizeof(event len) */
 	len += 2;
 
-	return esp_hosted_tx(ESP_PRIV_IF, 0, sendbuf, len, H_BUFF_NO_ZEROCOPY, sendbuf, h_free_fn, 0);
+	return h_transmit(ESP_PRIV_IF, 0, sendbuf, len, H_BUFF_NO_ZEROCOPY, sendbuf, h_free_fn, 0);
 }
 
 static int transport_delayed_init(void)
@@ -967,9 +948,9 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 
 	transport_driver_event_handler(TRANSPORT_TX_ACTIVE);
 
-	ret = send_slave_config(0, chip_type, raw_tp_config,
-		0,
-		0);
+	ret = send_slave_config(H_TEST_RAW_TP_DIR, chip_type, raw_tp_config,
+		H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD,
+		H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD);
 	if (ret != H_OK) {
 		return ret;
 	}
@@ -981,5 +962,7 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 
 int serial_rx_handler(interface_buffer_handle_t * buf_handle)
 {
+    /* Routing RX packet to serial layer (CLI/RPC) */
+	extern int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle);
 	return serial_ll_rx_handler(buf_handle);
 }

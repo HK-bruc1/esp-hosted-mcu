@@ -46,21 +46,18 @@ jobs:
       - name: Check Phase 1 portable boundary is ESP-IDF free
         run: bash scripts/check_core_isolation.sh
 
-      - name: Verify Phase 1 portable subset compiles without ESP-IDF toolchain
+      - name: Verify all core files are platform-agnostic (no ESP-IDF dependency)
         run: |
-          for f in \
-            host/core/src/h_init.c \
-            host/core/src/h_api.c \
-            host/core/src/h_event.c \
-            host/core/src/h_serial_if.c; do
+          for f in host/core/src/*.c; do
             echo "Checking $f..."
             gcc -fsyntax-only \
               -I host/core/include/h_public \
               -I host/core/include/h_internal \
-              -I host/port/linux \
               -I host/port/include \
+              -I host/port/linux \
               -I common/transport \
               -I common/mempool/include \
+              -I host/api/include \
               -Wall -Werror \
               "$f"
           done
@@ -127,15 +124,34 @@ jobs:
         uses: espressif/esp-idf-ci-action@v2
         with:
           esp_idf_version: ${{ matrix.idf_version }}
-          target: esp32p4
+          target: esp32c6
           command: |
             # Syntax-check ESP-IDF port source files against IDF includes
+            # Using esp32c6 (RISC-V) as a stable target
             for f in host/port/esp-idf/*.c; do
               echo "Checking $f..."
-              xtensa-esp32p4-elf-gcc -fsyntax-only \
-                $(idf.py --preview set-target esp32p4 2>/dev/null; echo "-I${IDF_PATH}/components/freertos/FreeRTOS-Kernel/include") \
+              riscv32-esp-elf-gcc -fsyntax-only \
                 -I host/core/include/h_public \
                 -I host/port/include \
                 -I host/port/esp-idf \
+                -I common/transport \
+                -I common/mempool/include \
+                -I host/api/include \
+                -I ${IDF_PATH}/components/freertos/FreeRTOS-Kernel/include \
+                -I ${IDF_PATH}/components/freertos/esp_additions/include/freertos \
+                -I ${IDF_PATH}/components/esp_hw_support/include \
+                -I ${IDF_PATH}/components/esp_common/include \
+                -I ${IDF_PATH}/components/esp_rom/include \
+                -I ${IDF_PATH}/components/esp_system/include \
+                -I ${IDF_PATH}/components/esp_timer/include \
+                -I ${IDF_PATH}/components/hal/include \
+                -I ${IDF_PATH}/components/soc/include \
+                -I ${IDF_PATH}/components/soc/esp32c6/include \
+                -I ${IDF_PATH}/components/log/include \
+                -I ${IDF_PATH}/components/heap/include \
+                -I ${IDF_PATH}/components/newlib/platform_include \
+                -I ${IDF_PATH}/components/esp_driver_spi/include \
+                -I ${IDF_PATH}/components/esp_driver_gpio/include \
+                -I ${IDF_PATH}/components/esp_wifi/include \
                 "$f" || { echo "  [ERROR] Syntax check failed — fix before merge"; exit 1; }
             done

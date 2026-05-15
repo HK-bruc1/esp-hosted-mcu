@@ -66,19 +66,17 @@ uint8_t h_serial_parse_tlv(uint8_t* data, uint32_t* pro_len)
         val_len = (data[len] << 8) + val_len;
         len++;
 
-        if (val_len == strlen(ep_name)) {
-            if ((strncmp((char* )&data[len], ep_name, strlen(ep_name)) == 0) ||
-                (strncmp((char* )&data[len], ep_name2, strlen(ep_name2)) == 0)) {
-                len = len + strlen(ep_name);
-                if (data[len] == H_SERIAL_TLV_T_DATA) {
-                    len++;
-                    val_len = data[len];
-                    len++;
-                    val_len = (data[len] << 8) + val_len;
-                    len++;
-                    *pro_len = val_len;
-                    return H_OK;
-                }
+        if ((val_len == strlen(ep_name) && strncmp((char*)&data[len], ep_name, val_len) == 0) ||
+            (val_len == strlen(ep_name2) && strncmp((char*)&data[len], ep_name2, val_len) == 0)) {
+            len = len + val_len;
+            if (data[len] == H_SERIAL_TLV_T_DATA) {
+                len++;
+                val_len = data[len];
+                len++;
+                val_len = (data[len] << 8) + val_len;
+                len++;
+                *pro_len = val_len;
+                return H_OK;
             }
         }
     }

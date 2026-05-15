@@ -417,6 +417,12 @@ const h_osal_contract_t g_h_osal = {
     .blocking_delay = linux_blocking_delay,
 
     .log_write      = linux_log_write,
+
+    .restart_host   = NULL,
+    .hosted_init_hook = NULL,
+    .woke_from_ps   = NULL,
+    .ps_init        = NULL,
+    .spi_hd_set_data_lines = NULL,
 };
 
 /* ── Port Init/Deinit Entry Points ── */
