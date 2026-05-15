@@ -59,6 +59,8 @@ jobs:
               -I host/core/include/h_internal \
               -I host/port/linux \
               -I host/port/include \
+              -I common/transport \
+              -I common/mempool/include \
               -Wall -Werror \
               "$f"
           done
