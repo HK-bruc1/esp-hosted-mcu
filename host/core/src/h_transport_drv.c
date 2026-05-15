@@ -31,20 +31,20 @@
  * so that H_USE_MEMPOOL is visible when transport_util.h is parsed.
  * These will be migrated to new framework symbols in WP 4.4. */
 #include "esp_hosted_os_abstraction.h"
-#include "port_esp_hosted_host_config.h"
+// REMOVED legacy includes
 
 #include "mempool.h"
 #include "transport_util.h"
 
-/* Transport-specific buffer size definitions (needed for MAX_TRANSPORT_BUFFER_SIZE) */
+/* Transport-specific buffer size definitions (needed for 1600) */
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
-#include "port_esp_hosted_host_spi.h"
+// REMOVED legacy includes
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO
-#include "port_esp_hosted_host_sdio.h"
+// REMOVED legacy includes
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_SPI_HD
-#include "port_esp_hosted_host_spi_hd.h"
+// REMOVED legacy includes
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_UART
-#include "port_esp_hosted_host_uart.h"
+// REMOVED legacy includes
 #endif
 
 #include "esp_hosted_cli.h"
@@ -276,7 +276,7 @@ h_err_t transport_drv_remove_channel(transport_channel_t *channel)
 	transport_drv_common_mempool_destroy(channel->memp);
 #endif
 	chan_arr[channel->if_type] = NULL;
-	HOSTED_FREE(channel);
+	h_free(channel);
 
 	return H_OK;
 }
@@ -292,7 +292,7 @@ h_err_t transport_drv_remove_channel(transport_channel_t *channel)
 
 // reference count mempool allocations
 static int ref_count_mempool = 0;
-static hosted_mempool_t * mempool_common = NULL;
+static hosted_mempool_t * mempool __attribute__((unused))_common = NULL;
 
 static hosted_mempool_t * transport_drv_common_mempool_create(void)
 {
@@ -347,7 +347,7 @@ static void transport_serial_free_cb(void *buf)
 	MEMPOOL_FREE(chan_arr[ESP_SERIAL_IF]->memp, buf);
 }
 
-static inline void *mempool_alloc(hosted_mempool_t * mempool, size_t size, unsigned int need_memset)
+static inline void *mempool_alloc(hosted_mempool_t * mempool __attribute__((unused)), size_t size, unsigned int need_memset)
 {
 	MEMPOOL_ALLOC(mempool, size, need_memset);
 }
@@ -369,7 +369,7 @@ static h_err_t transport_drv_sta_tx(void *h, void *buffer, size_t len)
 #endif
 	}
 
-	if (unlikely(wifi_tx_throttling)) {
+	if ((wifi_tx_throttling)) {
 	#if ESP_PKT_STATS
 		pkt_stats.sta_tx_flowctrl_drop++;
 	#endif
@@ -385,7 +385,7 @@ static h_err_t transport_drv_sta_tx(void *h, void *buffer, size_t len)
 	assert(h && h==chan_arr[ESP_STA_IF]->api_chan);
 
 	/*  Prepare transport buffer directly consumable */
-	copy_buff = mempool_alloc(chan_arr[ESP_STA_IF]->memp, MAX_TRANSPORT_BUFFER_SIZE, true);
+	copy_buff = mempool_alloc(chan_arr[ESP_STA_IF]->memp, 1600, true);
 	if (!copy_buff) {
 		H_LOGW(TAG, "STA TX: mempool_alloc failed, dropping pkt (len=%u)", len);
 #if defined(H_ERR_BUSY)
@@ -420,7 +420,7 @@ static h_err_t transport_drv_ap_tx(void *h, void *buffer, size_t len)
 	assert(h && h==chan_arr[ESP_AP_IF]->api_chan);
 
 	/*  Prepare transport buffer directly consumable */
-	copy_buff = mempool_alloc(chan_arr[ESP_AP_IF]->memp, MAX_TRANSPORT_BUFFER_SIZE, true);
+	copy_buff = mempool_alloc(chan_arr[ESP_AP_IF]->memp, 1600, true);
 	if (!copy_buff) {
 		H_LOGW(TAG, "AP TX: mempool_alloc failed, dropping pkt (len=%u)", len);
 #if defined(H_ERR_BUSY)
@@ -475,7 +475,7 @@ transport_channel_t *transport_drv_add_channel(void *api_chan,
 			transport_drv_common_mempool_destroy(chan_arr[if_type]->memp);
 #endif
 		}
-		HOSTED_FREE(chan_arr[if_type]);
+		h_free(chan_arr[if_type]);
 		chan_arr[if_type] = NULL;
 	}
 
@@ -830,7 +830,7 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 {
 	uint8_t len_left = len, tag_len;
 	uint8_t *pos;
-	uint8_t raw_tp_config = H_TEST_RAW_TP_DIR;
+	uint8_t raw_tp_config = 0;
 	uint32_t ext_cap = 0;
 	uint32_t slave_fw_version = 0;
 	h_err_t ret;
@@ -968,8 +968,8 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 	transport_driver_event_handler(TRANSPORT_TX_ACTIVE);
 
 	ret = send_slave_config(0, chip_type, raw_tp_config,
-		H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD,
-		H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD);
+		0,
+		0);
 	if (ret != H_OK) {
 		return ret;
 	}
