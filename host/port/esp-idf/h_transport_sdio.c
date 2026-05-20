@@ -132,13 +132,22 @@ static int h_gpio_write_adapter(uint32_t pin, uint32_t value)
     return H_OK;
 }
 
+static int h_esp_hosted_tx_adapter(uint8_t iface_type, uint8_t iface_num,
+                                   uint8_t *payload, uint16_t len,
+                                   uint8_t zcopy, void *to_free,
+                                   void (*free_fn)(void *), uint8_t flags)
+{
+    return esp_hosted_tx(iface_type, iface_num, payload, len, zcopy,
+                         (uint8_t *)to_free, free_fn, flags);
+}
+
 /* ──  Global Transport Contract Instance (SDIO) ── */
 
 const h_transport_contract_t g_h_transport = {
     .init           = h_sdio_init_adapter,
     .deinit         = h_sdio_deinit_adapter,
     .bus_ready      = ensure_slave_bus_ready,
-    .transmit       = esp_hosted_tx,
+    .transmit       = h_esp_hosted_tx_adapter,
 
     /* SPI — not used in SDIO transport */
     .spi_transfer   = NULL,

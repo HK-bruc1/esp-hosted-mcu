@@ -184,9 +184,6 @@ void h_wifi_adapt_ap_record_to_native(const h_wifi_ap_record_t *src, wifi_ap_rec
     dst->authmode  = h_wifi_adapt_auth_to_native(src->authmode);
     dst->pairwise_cipher = h_wifi_adapt_cipher_to_native(src->pairwise_cipher);
     dst->group_cipher    = h_wifi_adapt_cipher_to_native(src->group_cipher);
-#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
-    dst->beacon_interval = src->beacon_interval;
-#endif
     memcpy(dst->country.cc, src->country, sizeof(dst->country.cc));
     dst->phy_11b = src->phy_11b;
     dst->phy_11g = src->phy_11g;
@@ -207,9 +204,6 @@ void h_wifi_adapt_ap_record_to_host(const wifi_ap_record_t *src, h_wifi_ap_recor
     dst->authmode         = h_wifi_adapt_auth_to_host(src->authmode);
     dst->pairwise_cipher  = h_wifi_adapt_cipher_to_host(src->pairwise_cipher);
     dst->group_cipher     = h_wifi_adapt_cipher_to_host(src->group_cipher);
-#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
-    dst->beacon_interval  = src->beacon_interval;
-#endif
     memcpy(dst->country, src->country.cc, sizeof(dst->country));
     dst->country_len = 2;  /* ISO 3166-1 alpha-2 */
     dst->phy_11b = src->phy_11b;
