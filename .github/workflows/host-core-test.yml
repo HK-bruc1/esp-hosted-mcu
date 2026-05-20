@@ -59,6 +59,7 @@ jobs:
             -I common/mempool/include
             -I common/transport
             -I common
+            -I host
             -I host/api/include
             -I host/drivers/transport
             -I host/drivers/rpc/core
