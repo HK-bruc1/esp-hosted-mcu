@@ -22,7 +22,7 @@ static void *g_serial_handle = NULL;
 
 /* ── TLV Helpers ── */
 
-uint16_t h_serial_compose_tlv(uint8_t* buf, const uint8_t* data, uint16_t data_length)
+static uint16_t serial_compose_tlv(uint8_t *buf, const uint8_t *data, uint16_t data_length)
 {
     const char* ep_name = RPC_EP_NAME_RSP;
     uint16_t ep_length = strlen(ep_name);
@@ -50,37 +50,6 @@ uint16_t h_serial_compose_tlv(uint8_t* buf, const uint8_t* data, uint16_t data_l
     h_memcpy(&buf[count], data, data_length);
     count = count + data_length;
     return count;
-}
-
-uint8_t h_serial_parse_tlv(uint8_t* data, uint32_t* pro_len)
-{
-    const char* ep_name = RPC_EP_NAME_RSP;
-    const char* ep_name2 = RPC_EP_NAME_EVT;
-    uint64_t len = 0;
-    uint16_t val_len = 0;
-
-    if (data[len] == H_SERIAL_TLV_T_EPNAME) {
-        len++;
-        val_len = data[len];
-        len++;
-        val_len = (data[len] << 8) + val_len;
-        len++;
-
-        if ((val_len == strlen(ep_name) && strncmp((char*)&data[len], ep_name, val_len) == 0) ||
-            (val_len == strlen(ep_name2) && strncmp((char*)&data[len], ep_name2, val_len) == 0)) {
-            len = len + val_len;
-            if (data[len] == H_SERIAL_TLV_T_DATA) {
-                len++;
-                val_len = data[len];
-                len++;
-                val_len = (data[len] << 8) + val_len;
-                len++;
-                *pro_len = val_len;
-                return H_OK;
-            }
-        }
-    }
-    return H_FAIL;
 }
 
 /* ── Public API ── */
@@ -139,18 +108,23 @@ h_err_t h_serial_if_send(const uint8_t *data, uint16_t len)
         return H_ERR_NO_MEM;
     }
 
-    count = h_serial_compose_tlv(write_buf, data, len);
+    count = serial_compose_tlv(write_buf, data, len);
     if (!count) {
         h_free(write_buf);
         return H_FAIL;
     }
 
     if (serial_drv_write((struct serial_drv_handle_t*)g_serial_handle, write_buf, count, &out_count) != H_OK) {
-        h_free(write_buf);
+        /* Once serial_drv_write() is called, write_buf is owned by the serial or
+         * transport layer even if the call reports failure. */
         return H_FAIL;
     }
 
-    /* write_buf is typically freed by transport layer via callback */
+    if (out_count != count) {
+        return H_FAIL;
+    }
+
+    /* write_buf is freed by the transport layer via callback */
     return H_OK;
 }
 

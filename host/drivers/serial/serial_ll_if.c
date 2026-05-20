@@ -207,15 +207,18 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 {
 
 	if ((! serial_ll_hdl) || (serial_ll_hdl->state != ACTIVE)) {
+		H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
 		ESP_LOGE(TAG, "serial invalid interface for write");
 		return -1;
 	}
 
 	if (!wbuffer || !wlen) {
+		H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
 		return -1;
 	}
 
 	if (wlen > MAX_FRAGMENTABLE_PAYLOAD_SIZE) {
+		H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
 		ESP_LOGE(TAG, "Payload too large: %u bytes (max allowed: %u)", wlen, MAX_FRAGMENTABLE_PAYLOAD_SIZE);
 		return -1;
 	}

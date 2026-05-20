@@ -53,7 +53,10 @@ struct serial_drv_handle_t* serial_drv_open (const char* transport);
  * Input parameter
  *      serial_drv_handle           :   Driver Handler
  *      buf                         :   Data Buffer (Data written from buf to
- *                                      driver interface)
+ *                                      driver interface). Once this function is
+ *                                      called, the serial or transport layer
+ *                                      owns buf and frees it on success or
+ *                                      failure.
  *      in_count                    :   Number of Bytes to be written
  * Output parameter
  *      out_count                   :   Number of Bytes written

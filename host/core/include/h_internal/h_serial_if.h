@@ -19,7 +19,4 @@ void    h_serial_if_deinit(void);
 h_err_t h_serial_if_send(const uint8_t *data, uint16_t len);
 h_err_t h_serial_if_recv(uint8_t *data, uint16_t *len, int32_t timeout_ms);
 
-uint16_t h_serial_compose_tlv(uint8_t* buf, const uint8_t* data, uint16_t data_length);
-uint8_t  h_serial_parse_tlv(uint8_t* data, uint32_t* pro_len);
-
 #endif
