@@ -130,7 +130,19 @@ void *hosted_realloc(void *mem, size_t newsize)
 
 void *hosted_malloc_align(size_t size, size_t align)
 {
-	return heap_caps_aligned_alloc(align, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+	void *ptr = NULL;
+
+#if CONFIG_ESP_HOSTED_MEMPOOL_PREFER_SPIRAM
+	/* On targets where GDMA can reach PSRAM through cache (e.g. ESP32-P4),
+	 * prefer DMA-capable SPIRAM to preserve scarce internal RAM. */
+	ptr = heap_caps_aligned_alloc(align, size,
+			MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+#endif
+	if (!ptr) {
+		ptr = heap_caps_aligned_alloc(align, size,
+				MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_8BIT);
+	}
+	return ptr;
 }
 
 void hosted_free_align(void* ptr)
