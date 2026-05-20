@@ -36,15 +36,6 @@ extern int hosted_read_gpio(void *gpio_port, uint32_t gpio_num);
 extern int hosted_write_gpio(void *gpio_port, uint32_t gpio_num,
                              uint32_t value);
 
-static int h_esp_hosted_tx_adapter(uint8_t iface_type, uint8_t iface_num,
-                                   uint8_t *payload, uint16_t len,
-                                   uint8_t zcopy, void *to_free,
-                                   void (*free_fn)(void *), uint8_t flags)
-{
-    return esp_hosted_tx(iface_type, iface_num, payload, len, zcopy,
-                         (uint8_t *)to_free, free_fn, flags);
-}
-
 /* ──  Adapters ── */
 
 /* hosted_spi_init returns void* directly; contract uses void** out param */
@@ -105,7 +96,7 @@ const h_transport_contract_t g_h_transport = {
     .init           = h_spi_init_adapter,
     .deinit         = h_spi_deinit_adapter,
     .bus_ready      = ensure_slave_bus_ready,
-    .transmit       = h_esp_hosted_tx_adapter,
+    .transmit       = esp_hosted_tx,
 
     /* SPI */
     .spi_transfer   = h_spi_transfer_adapter,

@@ -34,21 +34,6 @@
 #ifndef H_DEFAULT_TASK_PRIO
 #define H_DEFAULT_TASK_PRIO   5
 #endif
-#ifndef H_RPC_TASK_STACK_SIZE
-#define H_RPC_TASK_STACK_SIZE H_DEFAULT_TASK_STACK
-#endif
-#ifndef H_RPC_TASK_PRIO
-#define H_RPC_TASK_PRIO       H_DEFAULT_TASK_PRIO
-#endif
-
-/* Time/status defaults used by portable core code.
- * Ports can override before including this header. */
-#ifndef H_RET_FAIL_TIMEOUT
-#define H_RET_FAIL_TIMEOUT    (-5)
-#endif
-#ifndef H_SEC_TO_MILLISEC
-#define H_SEC_TO_MILLISEC(x)  (1000 * (x))
-#endif
 
 /* ── Feature Flags (Phase 1) ──
  * Disabled by default; enabled per-feature in future phases. */

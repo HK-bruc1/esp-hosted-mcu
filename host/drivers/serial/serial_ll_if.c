@@ -8,7 +8,6 @@
 #include "string.h"
 #include "serial_ll_if.h"
 #include "transport_drv.h"
-#include "h_wrapper.h"
 #include "esp_hosted_transport.h"
 #include "esp_hosted_header.h"
 #include "port_esp_hosted_host_log.h"

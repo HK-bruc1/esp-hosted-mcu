@@ -19,7 +19,7 @@
 #include "esp_hosted_host_fw_ver.h"
 #include <errno.h>
 
-/* Transport-specific buffer size definitions */
+/* Transport-specific buffer size definitions (needed for 1600) */
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
 // REMOVED legacy includes
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO
@@ -369,7 +369,7 @@ static h_err_t transport_drv_sta_tx(void *h, void *buffer, size_t len)
 	assert(h && h==chan_arr[ESP_STA_IF]->api_chan);
 
 	/*  Prepare transport buffer directly consumable */
-	copy_buff = mempool_alloc(chan_arr[ESP_STA_IF]->memp, ESP_TRANSPORT_MAX_BUF_SIZE, true);
+	copy_buff = mempool_alloc(chan_arr[ESP_STA_IF]->memp, 1600, true);
 	if (!copy_buff) {
 		H_LOGW(TAG, "STA TX: mempool_alloc failed, dropping pkt (len=%u)", len);
 #if defined(H_ERR_BUSY)
@@ -404,7 +404,7 @@ static h_err_t transport_drv_ap_tx(void *h, void *buffer, size_t len)
 	assert(h && h==chan_arr[ESP_AP_IF]->api_chan);
 
 	/*  Prepare transport buffer directly consumable */
-	copy_buff = mempool_alloc(chan_arr[ESP_AP_IF]->memp, ESP_TRANSPORT_MAX_BUF_SIZE, true);
+	copy_buff = mempool_alloc(chan_arr[ESP_AP_IF]->memp, 1600, true);
 	if (!copy_buff) {
 		H_LOGW(TAG, "AP TX: mempool_alloc failed, dropping pkt (len=%u)", len);
 #if defined(H_ERR_BUSY)
@@ -811,7 +811,7 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 {
 	uint8_t len_left = len, tag_len;
 	uint8_t *pos;
-	uint8_t raw_tp_config = H_TEST_RAW_TP_DIR;
+	uint8_t raw_tp_config = 0;
 	uint32_t ext_cap = 0;
 	uint32_t slave_fw_version = 0;
 	h_err_t ret;
@@ -856,7 +856,8 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 		} else if (*pos == ESP_PRIV_TEST_RAW_TP) {
 			H_LOGI(TAG, "EVENT: %2x", *pos);
 #if TEST_RAW_TP
-			process_test_capabilities(*(pos + 2));
+			raw_tp_config = *(pos + 2);
+			process_test_capabilities(raw_tp_config);
 #else
 			if (*(pos + 2))
 				H_LOGW(TAG, "Slave enabled Raw Throughput Testing, but not enabled on Host");
@@ -948,7 +949,7 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 
 	transport_driver_event_handler(TRANSPORT_TX_ACTIVE);
 
-	ret = send_slave_config(0, chip_type, raw_tp_config,
+	ret = send_slave_config(H_TEST_RAW_TP_DIR, chip_type, raw_tp_config,
 		H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD,
 		H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD);
 	if (ret != H_OK) {

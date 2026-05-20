@@ -4,28 +4,7 @@
 #ifndef H_PORT_CONFIG_ESPIDF_H
 #define H_PORT_CONFIG_ESPIDF_H
 
-#if __has_include("sdkconfig.h")
-#include "sdkconfig.h"
-#endif
 #include "esp_idf_version.h"
-
-/* Keep this header self-contained for ESP-IDF port sources that include it
- * directly instead of going through host/port/include/h_config.h. */
-#ifndef H_TRANSPORT_NONE
-#define H_TRANSPORT_NONE    0
-#endif
-#ifndef H_TRANSPORT_SDIO
-#define H_TRANSPORT_SDIO    1
-#endif
-#ifndef H_TRANSPORT_SPI_HD
-#define H_TRANSPORT_SPI_HD  2
-#endif
-#ifndef H_TRANSPORT_SPI
-#define H_TRANSPORT_SPI     3
-#endif
-#ifndef H_TRANSPORT_UART
-#define H_TRANSPORT_UART    4
-#endif
 
 /* ── Transport — selected by Kconfig at build time ── */
 #if defined(CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE)

@@ -12,6 +12,8 @@
 #include <inttypes.h>
 #include "rpc_core.h"
 #include "esp_hosted_rpc.h"
+#include "serial_if.h"
+#include "serial_drv.h"
 #include "h_serial_if.h"
 #include <unistd.h>
 // REMOVED: esp_task.h
@@ -217,7 +219,7 @@ static int process_rpc_tx_msg(ctrl_cmd_t *app_req)
 			H_LOGE(TAG, "Failed to create async resp timer");
 			goto fail_req;
 		}
-		timer_ret = h_timer_start(timer_hdl, H_SEC_TO_MILLISEC(app_req->rsp_timeout_sec), false,
+		timer_ret = h_timer_start(timer_hdl, SEC_TO_MILLISEC(app_req->rsp_timeout_sec), false,
 				rpc_async_timeout_handler, app_req);
 		if (timer_ret != H_OK) {
 			H_LOGE(TAG, "Failed to start async resp timer");
@@ -465,6 +467,12 @@ static void rpc_rx_thread(void *arg)
 	rpc_rx_ind_t rpc_rx_func;
 	rpc_rx_func = (rpc_rx_ind_t) arg;
 
+	/* If serial interface is not available, exit */
+	if (!serial_drv_open(SERIAL_IF_FILE)) {
+		H_LOGE(TAG, "Exiting thread, handle invalid");
+		return;
+	}
+
 	/* This queue should already be created
 	 * if NULL, exit here */
 	if (!rpc_rx_q) {
@@ -520,6 +528,11 @@ static void rpc_tx_thread(void *arg)
 	ctrl_cmd_t *app_req = NULL;
 
 	H_LOGD(TAG, "Starting tx thread");
+	/* If serial interface is not available, exit */
+	if (!serial_drv_open(SERIAL_IF_FILE)) {
+		H_LOGE(TAG, "Exiting thread, handle invalid");
+		return;
+	}
 
 	/* This queue should already be created
 	 * if NULL, exit here */
@@ -569,11 +582,11 @@ static int spawn_rpc_threads(void)
 {
 	/* create new thread for rpc RX path handling */
 	int thread_ret;
-	thread_ret = h_thread_create("rpc_rx", H_RPC_TASK_PRIO,
-			H_RPC_TASK_STACK_SIZE, rpc_rx_thread, NULL, &rpc_rx_thread_hdl);
+	thread_ret = h_thread_create("rpc_rx", RPC_TASK_PRIO,
+			RPC_TASK_STACK_SIZE, rpc_rx_thread, NULL, &rpc_rx_thread_hdl);
 	if (thread_ret == H_OK) {
-		thread_ret = h_thread_create("rpc_tx", H_RPC_TASK_PRIO,
-				H_RPC_TASK_STACK_SIZE, rpc_tx_thread, NULL, &rpc_tx_thread_hdl);
+		thread_ret = h_thread_create("rpc_tx", RPC_TASK_PRIO,
+				RPC_TASK_STACK_SIZE, rpc_tx_thread, NULL, &rpc_tx_thread_hdl);
 	}
 	if (thread_ret != H_OK || !rpc_rx_thread_hdl || !rpc_tx_thread_hdl) {
 		H_LOGE(TAG, "Thread creation failed for rpc_rx_thread");
@@ -632,7 +645,7 @@ static ctrl_cmd_t * get_response(int *read_len, ctrl_cmd_t *app_req)
 	/* Wait for response */
 	ret = wait_for_sync_response(app_req);
 	if (ret) {
-		if ((ret == H_RET_FAIL_TIMEOUT) || (errno == ETIMEDOUT))
+		if ((ret == RET_FAIL_TIMEOUT) || (errno == ETIMEDOUT))
 			H_LOGW(TAG, "Timeout waiting for Resp for [0x%x](%s)", app_req->msg_id, rpc_id_name(app_req->msg_id));
 		else
 			H_LOGE(TAG, "ERR [%u] ret[%d] for [0x%x](%s)", errno, ret, app_req->msg_id, rpc_id_name(app_req->msg_id));
@@ -1179,9 +1192,9 @@ int rpc_core_stop(void)
 	return H_OK;
 }
 
-/* ── h_rpc_send_request ──
+/* ── Phase 1: h_rpc_send_request ──
  * Synchronous buffer-based RPC dispatch.
- * Sends protobuf payloads through the h_serial_if control-plane abstraction.
+ * Bridges to legacy transport_pserial_* via h_serial_if abstraction.
  * Full request/response tracking (UID matching, async callbacks) is handled
  * by the legacy rpc_send_req() path; this function provides the new
  * contract-layer entry point for direct buffer exchange. */

@@ -2392,8 +2392,8 @@ static h_err_t rpc_supp_cb_thread_start(void)
 
 	// create and start the thread
 	if (!rpc_supp_cb_thread_hdl) {
-		ret = h_thread_create("rpc_supp_cb", H_RPC_TASK_PRIO,
-			H_RPC_TASK_STACK_SIZE, rpc_supp_thread, NULL, &rpc_supp_cb_thread_hdl);
+		ret = h_thread_create("rpc_supp_cb", RPC_TASK_PRIO,
+			RPC_TASK_STACK_SIZE, rpc_supp_thread, NULL, &rpc_supp_cb_thread_hdl);
 		if (ret != H_OK) {
 			rpc_supp_cb_thread_hdl = NULL;
 		}
