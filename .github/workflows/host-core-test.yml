@@ -126,7 +126,7 @@ jobs:
             idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci.${{ matrix.transport }}" build
 
   # ── Tier 3 (supplement): ESP-IDF Host Build Verification ──
-  # Verifies ESP-IDF port files are compilable within IDF toolchain context.
+  # Builds a host example against this checkout's local esp_hosted component.
   esp-idf-host-build:
     runs-on: ubuntu-latest
     needs: linux-mock-test
@@ -134,45 +134,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        transport: [spi]
+        example: [host_framework_validation]
+        target: [esp32p4]
         idf_version: [v5.3]
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Verify ESP-IDF port files compile (syntax check)
+      - name: Build host example (${{ matrix.example }}, ${{ matrix.target }}, IDF ${{ matrix.idf_version }})
         uses: espressif/esp-idf-ci-action@v1.2.0
         with:
           esp_idf_version: ${{ matrix.idf_version }}
-          target: esp32c6
+          target: ${{ matrix.target }}
           command: |
-            # Syntax-check ESP-IDF port source files against IDF includes
-            # Using esp32c6 (RISC-V) as a stable target
-            for f in host/port/esp-idf/*.c; do
-              echo "Checking $f..."
-              riscv32-esp-elf-gcc -fsyntax-only \
-                -I host/core/include/h_public \
-                -I host/port/include \
-                -I host/port/esp-idf \
-                -I common/transport \
-                -I common/mempool/include \
-                -I host/api/include \
-                -I ${IDF_PATH}/components/freertos/FreeRTOS-Kernel/include \
-                -I ${IDF_PATH}/components/freertos/esp_additions/include/freertos \
-                -I ${IDF_PATH}/components/esp_hw_support/include \
-                -I ${IDF_PATH}/components/esp_common/include \
-                -I ${IDF_PATH}/components/esp_rom/include \
-                -I ${IDF_PATH}/components/esp_system/include \
-                -I ${IDF_PATH}/components/esp_timer/include \
-                -I ${IDF_PATH}/components/hal/include \
-                -I ${IDF_PATH}/components/soc/include \
-                -I ${IDF_PATH}/components/soc/esp32c6/include \
-                -I ${IDF_PATH}/components/log/include \
-                -I ${IDF_PATH}/components/heap/include \
-                -I ${IDF_PATH}/components/newlib/platform_include \
-                -I ${IDF_PATH}/components/esp_driver_spi/include \
-                -I ${IDF_PATH}/components/esp_driver_gpio/include \
-                -I ${IDF_PATH}/components/esp_wifi/include \
-                "$f" || { echo "  [ERROR] Syntax check failed — fix before merge"; exit 1; }
-            done
+            cd examples/${{ matrix.example }}
+            idf.py set-target ${{ matrix.target }}
+            idf.py build
