@@ -48,16 +48,34 @@ jobs:
 
       - name: Verify all core files are platform-agnostic (no ESP-IDF dependency)
         run: |
+          INC_FLAGS=(
+            -I host/core/include/h_public
+            -I host/core/include/h_internal
+            -I host/port/include
+            -I host/port/linux
+            -I tests/stubs
+            -I common/mempool/include
+            -I common/transport
+            -I common
+            -I host/api/include
+            -I host/drivers/transport
+            -I host/drivers/rpc/core
+            -I host/drivers/rpc/slaveif
+            -I host/drivers/virtual_serial_if
+            -I host/drivers/serial
+            -I host/drivers/rpc/wrap
+            -I common/proto
+            -I common/protobuf-c
+            -I common/rpc
+            -I common/log
+            -I common/utils
+            -I host/drivers/bt
+            -I host/port/esp-idf
+          )
           for f in host/core/src/*.c; do
             echo "Checking $f..."
             gcc -fsyntax-only \
-              -I host/core/include/h_public \
-              -I host/core/include/h_internal \
-              -I host/port/include \
-              -I host/port/linux \
-              -I common/transport \
-              -I common/mempool/include \
-              -I host/api/include \
+              "${INC_FLAGS[@]}" \
               -Wall -Werror \
               "$f"
           done
