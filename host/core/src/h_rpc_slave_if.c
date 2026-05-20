@@ -67,8 +67,11 @@ int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
 {
 	int ret = 0;
 	if (!serial_drv_handle || !buf || !in_count || !out_count) {
+		if (out_count) {
+			*out_count = 0;
+		}
 		H_LOGE(TAG,"Invalid parameters in write\n\r");
-		return serial_drv_write_fail(buf, out_count, H_ERR_INVALID_ARG);
+		return H_ERR_INVALID_ARG;
 	}
 
 	if( (!serial_ll_if_g) ||
