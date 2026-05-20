@@ -42,6 +42,8 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Check Phase 1 portable boundary is ESP-IDF free
         run: bash scripts/check_core_isolation.sh
