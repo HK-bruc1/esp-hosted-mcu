@@ -42,6 +42,8 @@
 /* Port-specific thread tuning (override H_DEFAULT_*) */
 /* #define H_DEFAULT_TASK_STACK  8192 */
 /* #define H_DEFAULT_TASK_PRIO   10 */
+#define H_RPC_TASK_STACK_SIZE  (5 * 1024)
+#define H_RPC_TASK_PRIO        23
 
 /* Phase 2 feature flags — explicitly 0 for Phase 1 */
 #define H_FEATURE_BLUETOOTH  0
