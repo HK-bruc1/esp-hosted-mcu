@@ -12,8 +12,6 @@
 #include <inttypes.h>
 #include "rpc_core.h"
 #include "esp_hosted_rpc.h"
-#include "serial_if.h"
-#include "serial_drv.h"
 #include "h_serial_if.h"
 #include <unistd.h>
 // REMOVED: esp_task.h
@@ -467,12 +465,6 @@ static void rpc_rx_thread(void *arg)
 	rpc_rx_ind_t rpc_rx_func;
 	rpc_rx_func = (rpc_rx_ind_t) arg;
 
-	/* If serial interface is not available, exit */
-	if (!serial_drv_open(SERIAL_IF_FILE)) {
-		H_LOGE(TAG, "Exiting thread, handle invalid");
-		return;
-	}
-
 	/* This queue should already be created
 	 * if NULL, exit here */
 	if (!rpc_rx_q) {
@@ -528,11 +520,6 @@ static void rpc_tx_thread(void *arg)
 	ctrl_cmd_t *app_req = NULL;
 
 	H_LOGD(TAG, "Starting tx thread");
-	/* If serial interface is not available, exit */
-	if (!serial_drv_open(SERIAL_IF_FILE)) {
-		H_LOGE(TAG, "Exiting thread, handle invalid");
-		return;
-	}
 
 	/* This queue should already be created
 	 * if NULL, exit here */
@@ -1192,9 +1179,9 @@ int rpc_core_stop(void)
 	return H_OK;
 }
 
-/* ── Phase 1: h_rpc_send_request ──
+/* ── h_rpc_send_request ──
  * Synchronous buffer-based RPC dispatch.
- * Bridges to legacy transport_pserial_* via h_serial_if abstraction.
+ * Sends protobuf payloads through the h_serial_if control-plane abstraction.
  * Full request/response tracking (UID matching, async callbacks) is handled
  * by the legacy rpc_send_req() path; this function provides the new
  * contract-layer entry point for direct buffer exchange. */

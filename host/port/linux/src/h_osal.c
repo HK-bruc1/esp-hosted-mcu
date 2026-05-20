@@ -47,7 +47,7 @@ static int linux_thread_create(const char *name, uint32_t prio, uint32_t stack,
     w->fn = fn;
     w->arg = arg;
     int ret = pthread_create(&w->thread, NULL, thread_entry, w);
-    if (ret != 0) {  return H_FAIL; }
+    if (ret != 0) { free(w); return H_FAIL; }
     *out = (h_thread_t)w;
     return H_OK;
 }
@@ -61,7 +61,7 @@ static int linux_thread_delete(h_thread_t thread)
      * need a clean way to tear them down from rpc_core_deinit(). */
     pthread_cancel(w->thread);
     pthread_join(w->thread, NULL); free(w);
-    /* w was freed in thread_entry */
+    /* w is owned by the joinable thread handle and released after join. */
     return H_OK;
 }
 

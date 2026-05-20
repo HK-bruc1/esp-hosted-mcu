@@ -34,15 +34,22 @@ h_err_t h_validate_contracts(void)
         return H_ERR_INVALID_ARG;
     }
 
+    /* Transport slots used by common core paths regardless of bus type. */
+    if (!g_h_transport.init || !g_h_transport.deinit ||
+        !g_h_transport.bus_ready || !g_h_transport.transmit) {
+        H_LOGE("INIT", "Transport contract missing common required functions");
+        return H_ERR_INVALID_ARG;
+    }
+
     /* Transport: validate the specific transport selected at compile time */
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
-    if (!g_h_transport.init || !g_h_transport.spi_transfer ||
+    if (!g_h_transport.spi_transfer ||
         !g_h_transport.gpio_config || !g_h_transport.gpio_set_intr) {
         H_LOGE("INIT", "SPI transport contract missing required functions");
         return H_ERR_INVALID_ARG;
     }
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_SPI_HD
-    if (!g_h_transport.init || !g_h_transport.spi_hd_read_reg ||
+    if (!g_h_transport.spi_hd_read_reg ||
         !g_h_transport.spi_hd_write_reg || !g_h_transport.spi_hd_read_dma ||
         !g_h_transport.spi_hd_write_dma || !g_h_transport.spi_hd_send_cmd9 ||
         !g_h_transport.gpio_config || !g_h_transport.gpio_set_intr) {
@@ -50,12 +57,13 @@ h_err_t h_validate_contracts(void)
         return H_ERR_INVALID_ARG;
     }
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO
-    if (!g_h_transport.init || !g_h_transport.sdio_read_block) {
+    if (!g_h_transport.sdio_read_block || !g_h_transport.sdio_write_block ||
+        !g_h_transport.sdio_wait_intr) {
         H_LOGE("INIT", "SDIO transport contract missing required functions");
         return H_ERR_INVALID_ARG;
     }
 #elif H_TRANSPORT_IN_USE == H_TRANSPORT_UART
-    if (!g_h_transport.init || !g_h_transport.uart_read) {
+    if (!g_h_transport.uart_read || !g_h_transport.uart_write) {
         H_LOGE("INIT", "UART transport contract missing required functions");
         return H_ERR_INVALID_ARG;
     }
