@@ -34,6 +34,15 @@ extern int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
                          uint8_t buff_zerocopy, uint8_t *buffer_to_free,
                          void (*free_buf_func)(void *ptr), uint8_t flags);
 
+static int h_esp_hosted_tx_adapter(uint8_t iface_type, uint8_t iface_num,
+                                   uint8_t *payload, uint16_t len,
+                                   uint8_t zcopy, void *to_free,
+                                   void (*free_fn)(void *), uint8_t flags)
+{
+    return esp_hosted_tx(iface_type, iface_num, payload, len, zcopy,
+                         (uint8_t *)to_free, free_fn, flags);
+}
+
 extern int hosted_config_gpio(void *gpio_port, uint32_t gpio_num,
                               uint32_t mode);
 extern int hosted_setup_gpio_interrupt(void *gpio_port, uint32_t gpio_num,
@@ -133,7 +142,7 @@ const h_transport_contract_t g_h_transport = {
     .init           = h_spi_hd_init_adapter,
     .deinit         = h_spi_hd_deinit_adapter,
     .bus_ready      = ensure_slave_bus_ready,
-    .transmit       = esp_hosted_tx,
+    .transmit       = h_esp_hosted_tx_adapter,
 
     /* SPI Full-Duplex — not used in SPI-HD transport */
     .spi_transfer   = NULL,
