@@ -117,7 +117,7 @@ jobs:
           submodules: recursive
 
       - name: Build slave (${{ matrix.target }}, ${{ matrix.transport }}, IDF ${{ matrix.idf_version }})
-        uses: espressif/esp-idf-ci-action@v2
+        uses: espressif/esp-idf-ci-action@v1.2.0
         with:
           esp_idf_version: ${{ matrix.idf_version }}
           target: ${{ matrix.target }}
@@ -142,7 +142,7 @@ jobs:
           submodules: recursive
 
       - name: Verify ESP-IDF port files compile (syntax check)
-        uses: espressif/esp-idf-ci-action@v2
+        uses: espressif/esp-idf-ci-action@v1.2.0
         with:
           esp_idf_version: ${{ matrix.idf_version }}
           target: esp32c6
