@@ -25,6 +25,17 @@ static void rpc_rx_indication(void);
 /* Global serial handle - shared by RPC RX and TX threads */
 static struct serial_drv_handle_t* g_serial_drv_handle = NULL;
 
+static int serial_drv_write_fail(uint8_t *buf, int *out_count, int ret)
+{
+	if (out_count) {
+		*out_count = 0;
+	}
+	if (buf) {
+		h_free(buf);
+	}
+	return ret;
+}
+
 /* -------- Serial Drv ---------- */
 struct serial_drv_handle_t* serial_drv_open(const char *transport)
 {
@@ -56,6 +67,9 @@ int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
 {
 	int ret = 0;
 	if (!serial_drv_handle || !buf || !in_count || !out_count) {
+		if (out_count) {
+			*out_count = 0;
+		}
 		H_LOGE(TAG,"Invalid parameters in write\n\r");
 		return H_ERR_INVALID_ARG;
 	}
@@ -64,7 +78,7 @@ int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
 		(!serial_ll_if_g->fops) ||
 		(!serial_ll_if_g->fops->write)) {
 		H_LOGE(TAG,"serial interface not valid\n\r");
-		return H_ERR_INVALID_ARG;
+		return serial_drv_write_fail(buf, out_count, H_ERR_INVALID_ARG);
 	}
 
 	H_LOGV(TAG, "serial_write buf=%p len=%u", buf, in_count);

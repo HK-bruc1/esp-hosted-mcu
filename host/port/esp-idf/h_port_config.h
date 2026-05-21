@@ -4,7 +4,29 @@
 #ifndef H_PORT_CONFIG_ESPIDF_H
 #define H_PORT_CONFIG_ESPIDF_H
 
+#if __has_include("sdkconfig.h")
+#include "sdkconfig.h"
+#endif
+
 #include "esp_idf_version.h"
+
+/* Keep this header self-contained for ESP-IDF port files that include it
+ * directly before h_config.h has defined the transport enum constants. */
+#ifndef H_TRANSPORT_NONE
+#define H_TRANSPORT_NONE    0
+#endif
+#ifndef H_TRANSPORT_SDIO
+#define H_TRANSPORT_SDIO    1
+#endif
+#ifndef H_TRANSPORT_SPI_HD
+#define H_TRANSPORT_SPI_HD  2
+#endif
+#ifndef H_TRANSPORT_SPI
+#define H_TRANSPORT_SPI     3
+#endif
+#ifndef H_TRANSPORT_UART
+#define H_TRANSPORT_UART    4
+#endif
 
 /* ── Transport — selected by Kconfig at build time ── */
 #if defined(CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE)
@@ -68,6 +90,29 @@
   #define H_DECODE_WIFI_RESERVED_FIELD 1
 #else
   #define H_DECODE_WIFI_RESERVED_FIELD 0
+#endif
+
+/* ── Transport config ── */
+#ifdef CONFIG_HOST_TO_ESP_WIFI_DATA_THROTTLE
+  #define H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD        CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_LOW_THRESHOLD
+  #define H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD       CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_HIGH_THRESHOLD
+#else
+  #define H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD        0
+  #define H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD       0
+#endif
+
+#if CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TRANSPORT
+  #if CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TX_TO_SLAVE
+    #define H_TEST_RAW_TP_DIR 0x04  /* ESP_TEST_RAW_TP__HOST_TO_ESP */
+  #elif CONFIG_ESP_HOSTED_RAW_THROUGHPUT_RX_FROM_SLAVE
+    #define H_TEST_RAW_TP_DIR 0x02  /* ESP_TEST_RAW_TP__ESP_TO_HOST */
+  #elif CONFIG_ESP_HOSTED_RAW_THROUGHPUT_BIDIRECTIONAL
+    #define H_TEST_RAW_TP_DIR 0x08  /* ESP_TEST_RAW_TP__BIDIRECTIONAL */
+  #else
+    #define H_TEST_RAW_TP_DIR 0
+  #endif
+#else
+  #define H_TEST_RAW_TP_DIR 0
 #endif
 
 #endif /* H_PORT_CONFIG_ESPIDF_H */

@@ -53,7 +53,10 @@ struct serial_drv_handle_t* serial_drv_open (const char* transport);
  * Input parameter
  *      serial_drv_handle           :   Driver Handler
  *      buf                         :   Data Buffer (Data written from buf to
- *                                      driver interface)
+ *                                      driver interface). Ownership transfers
+ *                                      after input arguments are accepted;
+ *                                      pure invalid-argument failures leave buf
+ *                                      ownership with caller.
  *      in_count                    :   Number of Bytes to be written
  * Output parameter
  *      out_count                   :   Number of Bytes written

@@ -19,6 +19,11 @@ extern esp_err_t hosted_uart_deinit(void *ctx);
 extern int       hosted_uart_read(void *ctx, uint8_t *data, uint16_t size);
 extern int       hosted_uart_write(void *ctx, uint8_t *data, uint16_t size);
 extern int       hosted_uart_flush_input(void *ctx);
+extern int       ensure_slave_bus_ready(void *bus_handle);
+extern int       esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
+                               uint8_t *payload_buf, uint16_t payload_len,
+                               uint8_t buff_zerocopy, uint8_t *buffer_to_free,
+                               void (*free_buf_func)(void *ptr), uint8_t flags);
 
 /* GPIO — from host/port/esp/freertos/src/port_esp_hosted_host_os.c */
 extern int hosted_config_gpio(void *gpio_port, uint32_t gpio_num,
@@ -97,11 +102,22 @@ static int h_gpio_write_adapter(uint32_t pin, uint32_t value)
     return H_OK;
 }
 
+static int h_esp_hosted_tx_adapter(uint8_t iface_type, uint8_t iface_num,
+                                   uint8_t *payload, uint16_t len,
+                                   uint8_t zcopy, void *to_free,
+                                   void (*free_fn)(void *), uint8_t flags)
+{
+    return esp_hosted_tx(iface_type, iface_num, payload, len, zcopy,
+                         (uint8_t *)to_free, free_fn, flags);
+}
+
 /* ──  Global Transport Contract Instance (UART) ── */
 
 const h_transport_contract_t g_h_transport = {
     .init           = h_uart_init_adapter,
     .deinit         = h_uart_deinit_adapter,
+    .bus_ready      = ensure_slave_bus_ready,
+    .transmit       = h_esp_hosted_tx_adapter,
 
     /* SPI — not used in UART transport */
     .spi_transfer   = NULL,
