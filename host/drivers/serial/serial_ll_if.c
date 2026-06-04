@@ -65,19 +65,18 @@ static struct serial_ll_operations serial_ll_fops = {
 static int serial_ll_open(serial_ll_handle_t *serial_ll_hdl)
 {
 	if (! serial_ll_hdl) {
-		ESP_LOGE(TAG, "serial invalid hdr");
+		H_LOGE(TAG, "serial invalid hdr");
 		return -1;
 	}
 
 	if (serial_ll_hdl->queue) {
 		/* clean up earlier queue */
-		ESP_LOGW(TAG, "Flush existing serial queue");
-		g_h.funcs->_h_destroy_queue(serial_ll_hdl->queue);
+		H_LOGW(TAG, "Flush existing serial queue");
+		h_queue_delete(serial_ll_hdl->queue);
 	}
 
 	/* Queue - serial rx */
-	serial_ll_hdl->queue = g_h.funcs->_h_create_queue(TO_SERIAL_INFT_QUEUE_SIZE,
-		sizeof(interface_buffer_handle_t));
+	h_queue_create(TO_SERIAL_INFT_QUEUE_SIZE, sizeof(interface_buffer_handle_t), &serial_ll_hdl->queue);
 
 	if (! serial_ll_hdl->queue) {
 		serial_ll_close(serial_ll_hdl);
@@ -101,7 +100,7 @@ static serial_ll_handle_t * get_serial_ll_handle(const uint8_t iface_num)
 
 		return interface_handle_g[iface_num];
 	}
-	ESP_LOGD(TAG, "%s Failed to get interface handle", __func__);
+	H_LOGD(TAG, "%s Failed to get interface handle", __func__);
 	return NULL;
 }
 
@@ -115,17 +114,17 @@ static int serial_ll_close(serial_ll_handle_t * serial_ll_hdl)
 	serial_ll_hdl->state = DESTROY;
 
 	if (serial_ll_hdl->queue) {
-		ESP_LOGI(TAG, "Clean-up serial queue");
+		H_LOGI(TAG, "Clean-up serial queue");
 
 		interface_buffer_handle_t buf_handle;
-		while (g_h.funcs->_h_dequeue_item(serial_ll_hdl->queue, &buf_handle, 0) == 0) {
+		while (h_queue_recv(serial_ll_hdl->queue, &buf_handle, 0) == 0) {
 			/* Free buffer using the provided free function */
 			if (buf_handle.priv_buffer_handle && buf_handle.free_buf_handle) {
 				buf_handle.free_buf_handle(buf_handle.priv_buffer_handle);
 			}
 		}
 
-		g_h.funcs->_h_destroy_queue(serial_ll_hdl->queue);
+		h_queue_delete(serial_ll_hdl->queue);
 		serial_ll_hdl->queue = NULL;
 	}
 
@@ -135,7 +134,7 @@ static int serial_ll_close(serial_ll_handle_t * serial_ll_hdl)
 	}
 
 	if (serial_ll_hdl) {
-		g_h.funcs->_h_free(serial_ll_hdl);
+		h_free(serial_ll_hdl);
 		serial_ll_hdl = NULL;
 	}
 	return 0;
@@ -159,7 +158,7 @@ static uint8_t * serial_ll_read(const serial_ll_handle_t * serial_ll_hdl,
 
 	/* check if serial interface valid */
 	if ((! serial_ll_hdl) || (serial_ll_hdl->state != ACTIVE)) {
-		ESP_LOGE(TAG, "serial invalid interface");
+		H_LOGE(TAG, "serial invalid interface");
 		return NULL;
 	}
 
@@ -176,22 +175,22 @@ static uint8_t * serial_ll_read(const serial_ll_handle_t * serial_ll_hdl,
 	 *
 	 * In our example, first approach of blocking read is used.
 	 */
-	ESP_LOGV(TAG, "before deQ for ll_read");
-	if (g_h.funcs->_h_dequeue_item(serial_ll_hdl->queue, &buf_handle, HOSTED_BLOCK_MAX)) {
-		ESP_LOGE(TAG, "serial queue recv failed ");
+	H_LOGV(TAG, "before deQ for ll_read");
+	if (h_queue_recv(serial_ll_hdl->queue, &buf_handle, H_BLOCK_MAX)) {
+		H_LOGE(TAG, "serial queue recv failed ");
 		return NULL;
 	}
-	ESP_LOGV(TAG, "after deQ for ll_read");
+	H_LOGV(TAG, "after deQ for ll_read");
 
 	/* proceed only if payload and length are sane */
 	if (!buf_handle.payload || !buf_handle.payload_len) {
-		ESP_LOGE(TAG, "%s: Dequeue result in empty buffer",__func__);
+		H_LOGE(TAG, "%s: Dequeue result in empty buffer",__func__);
 		return NULL;
 	}
 
 	*rlen = buf_handle.payload_len;
 
-	ESP_HEXLOGV("ll_read", buf_handle.payload, buf_handle.payload_len, 32);
+	H_HEXLOGD("ll_read", buf_handle.payload, buf_handle.payload_len, 32);
 
 	return buf_handle.payload;
 }
@@ -209,7 +208,7 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 
 	if ((! serial_ll_hdl) || (serial_ll_hdl->state != ACTIVE)) {
 		H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
-		ESP_LOGE(TAG, "serial invalid interface for write");
+		H_LOGE(TAG, "serial invalid interface for write");
 		return -1;
 	}
 
@@ -220,7 +219,7 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 
 	if (wlen > MAX_FRAGMENTABLE_PAYLOAD_SIZE) {
 		H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
-		ESP_LOGE(TAG, "Payload too large: %u bytes (max allowed: %u)", wlen, MAX_FRAGMENTABLE_PAYLOAD_SIZE);
+		H_LOGE(TAG, "Payload too large: %u bytes (max allowed: %u)", wlen, MAX_FRAGMENTABLE_PAYLOAD_SIZE);
 		return -1;
 	}
 
@@ -254,7 +253,7 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 			if (flags & MORE_FRAGMENT) {
 				H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
 			}
-			ESP_LOGE(TAG, "esp_hosted_tx failed at offset=%u len=%u", offset, frag_len);
+			H_LOGE(TAG, "esp_hosted_tx failed at offset=%u len=%u", offset, frag_len);
 			return ret;
 		}
 
@@ -281,12 +280,12 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 #define SERIAL_ALLOC_REALLOC_RDATA() \
 	do { \
 		if(!r.data) { \
-			r.data = (uint8_t *)g_h.funcs->_h_malloc(buf_handle->payload_len); \
+			r.data = (uint8_t *)h_malloc(buf_handle->payload_len); \
 		} else { \
-			r.data = (uint8_t *)g_h.funcs->_h_realloc(r.data, r.len + buf_handle->payload_len); \
+			r.data = (uint8_t *)h_realloc(r.data, r.len + buf_handle->payload_len); \
 		} \
 		if (!r.data) { \
-			ESP_LOGE(TAG, "Failed to allocate serial data"); \
+			H_LOGE(TAG, "Failed to allocate serial data"); \
 			goto serial_buff_cleanup; \
 		} \
 	} while(0);
@@ -297,7 +296,7 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 
 	/* Check valid handle and length */
 	if (!buf_handle || !buf_handle->payload_len) {
-		ESP_LOGE(TAG, "%s:%u Invalid parameters", __func__, __LINE__);
+		H_LOGE(TAG, "%s:%u Invalid parameters", __func__, __LINE__);
 		goto serial_buff_cleanup;
 	}
 
@@ -305,7 +304,7 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 
 	/* Is serial interface up */
 	if ((! serial_ll_hdl) || (serial_ll_hdl->state != ACTIVE)) {
-		ESP_LOGD(TAG, "Serial interface not active (possibly shutting down), discarding packet");
+		H_LOGD(TAG, "Serial interface not active (possibly shutting down), discarding packet");
 		goto serial_buff_cleanup_silent;
 	}
 
@@ -313,10 +312,10 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 	/* Accumulate fragments */
 	if (buf_handle->flag & MORE_FRAGMENT) {
 
-		ESP_LOGD(TAG, "Fragment!!!");
+		H_LOGD(TAG, "Fragment!!!");
 		SERIAL_ALLOC_REALLOC_RDATA();
 
-		g_h.funcs->_h_memcpy((r.data + r.len), buf_handle->payload, buf_handle->payload_len);
+		h_memcpy((r.data + r.len), buf_handle->payload, buf_handle->payload_len);
 		r.len += buf_handle->payload_len;
 		return 0;
 	}
@@ -324,15 +323,15 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 	SERIAL_ALLOC_REALLOC_RDATA();
 
 	/* No or last fragment */
-	g_h.funcs->_h_memcpy((r.data + r.len), buf_handle->payload, buf_handle->payload_len);
+	h_memcpy((r.data + r.len), buf_handle->payload, buf_handle->payload_len);
 	r.len += buf_handle->payload_len;
 
-	serial_buf = (uint8_t *)g_h.funcs->_h_malloc(r.len);
+	serial_buf = (uint8_t *)h_malloc(r.len);
 	if(!serial_buf) {
-		ESP_LOGE(TAG, "Malloc failed, drop pkt");
+		H_LOGE(TAG, "Malloc failed, drop pkt");
 		goto serial_buff_cleanup;
 	}
-	g_h.funcs->_h_memcpy(serial_buf, r.data, r.len);
+	h_memcpy(serial_buf, r.data, r.len);
 
 	/* form new buf handle for processing of serial msg */
 	new_buf_handle.if_type = ESP_SERIAL_IF;
@@ -340,24 +339,23 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 	new_buf_handle.payload_len = r.len;
 	new_buf_handle.payload = serial_buf;
 	new_buf_handle.priv_buffer_handle = serial_buf;
-	new_buf_handle.free_buf_handle = g_h.funcs->_h_free;
+	new_buf_handle.free_buf_handle = h_free_fn;
 
 	/* clear old buf handle */
 	//H_FREE_PTR_WITH_FUNC(buf_handle->free_buf_handle, buf_handle->priv_buffer_handle);
 
 
 	r.len = 0;
-	g_h.funcs->_h_free(r.data);
+	h_free(r.data);
 	r.data = NULL;
 
-	ESP_LOGV(TAG, "before ENQ for ll_read");
+	H_LOGV(TAG, "before ENQ for ll_read");
 	/* send to serial queue */
-	if (g_h.funcs->_h_queue_item(serial_ll_hdl->queue,
-		    &new_buf_handle, HOSTED_BLOCK_MAX)) {
-		ESP_LOGE(TAG, "Failed send serialif queue[%u]", new_buf_handle.if_num);
+	if (h_queue_send(serial_ll_hdl->queue, &new_buf_handle, H_BLOCK_MAX)) {
+		H_LOGE(TAG, "Failed send serialif queue[%u]", new_buf_handle.if_num);
 		goto serial_buff_cleanup;
 	}
-	ESP_LOGV(TAG, "after ENQ for ll_read");
+	H_LOGV(TAG, "after ENQ for ll_read");
 
 	/* Indicate higher layer about data ready for consumption */
 	if (serial_ll_hdl->serial_rx_callback) {
@@ -369,7 +367,7 @@ int serial_ll_rx_handler(interface_buffer_handle_t * buf_handle)
 	return 0;
 
 serial_buff_cleanup:
-	ESP_LOGE(TAG, "Err occurred, discard current buffer");
+	H_LOGE(TAG, "Err occurred, discard current buffer");
 
 serial_buff_cleanup_silent:
 	/* Common cleanup path - used for both errors and expected shutdown */
@@ -379,7 +377,7 @@ serial_buff_cleanup_silent:
 
 	H_FREE_PTR_WITH_FUNC(new_buf_handle.free_buf_handle, new_buf_handle.priv_buffer_handle);
 
-	g_h.funcs->_h_free(r.data);
+	h_free(r.data);
 	return -1;
 }
 
@@ -397,9 +395,9 @@ serial_ll_handle_t * serial_ll_init(void(*serial_rx_callback)(void))
 	/* Check if more serial interfaces be created */
 	if ((conn_num+1) < MAX_SERIAL_INTF) {
 
-		serial_ll_hdl = (serial_ll_handle_t *)g_h.funcs->_h_malloc(sizeof(serial_ll_handle_t));
+		serial_ll_hdl = (serial_ll_handle_t *)h_malloc(sizeof(serial_ll_handle_t));
 		if (! serial_ll_hdl) {
-			ESP_LOGE(TAG, "Serial interface - malloc failed");
+			H_LOGE(TAG, "Serial interface - malloc failed");
 			return NULL;
 		}
 
@@ -413,7 +411,7 @@ serial_ll_handle_t * serial_ll_init(void(*serial_rx_callback)(void))
 		conn_num++;
 
 	} else {
-		ESP_LOGE(TAG, "Number of serial interface connections overflow");
+		H_LOGE(TAG, "Number of serial interface connections overflow");
 		return NULL;
 	}
 

@@ -23,6 +23,7 @@ extern "C" {
 #include "esp_hosted_event.h"
 #include "h_init.h"
 #include "h_wifi_type_adapt.h"
+#include "h_wrapper.h"
 #include <stdlib.h>
 
 #if H_DPP_SUPPORT
@@ -64,9 +65,9 @@ static void transport_active_cb(void)
 {
 	ESP_LOGI(TAG, "Transport active");
 	esp_hosted_transport_up = 1;
-	g_h.funcs->_h_event_post(ESP_HOSTED_EVENT,
+	h_event_post(ESP_HOSTED_EVENT,
 			ESP_HOSTED_EVENT_TRANSPORT_UP,
-			NULL, 0, HOSTED_BLOCK_MAX);
+			NULL, 0, H_BLOCK_MAX);
 }
 
 #if 0
@@ -76,15 +77,15 @@ static void create_esp_hosted_transport_up_sem(void)
 		transport_up_sem = g_h.funcs->_h_create_semaphore(1);
 		assert(transport_up_sem);
 		/* clear semaphore */
-		g_h.funcs->_h_get_semaphore(transport_up_sem, 0);
+		h_sem_take(transport_up_sem, 0);
 	}
 }
 
 esp_err_t esp_hosted_setup(void)
 {
 	create_esp_hosted_transport_up_sem();
-	g_h.funcs->_h_get_semaphore(transport_up_sem, HOSTED_BLOCK_MAX);
-	g_h.funcs->_h_post_semaphore(transport_up_sem);
+	h_sem_take(transport_up_sem, H_BLOCK_MAX);
+	h_sem_give(transport_up_sem);
 	return ESP_OK;
 }
 #endif
@@ -183,9 +184,9 @@ int esp_hosted_deinit(void)
 	h_hosted_deinit();
 	esp_hosted_init_done = 0;
 	esp_hosted_transport_up = 0;
-	g_h.funcs->_h_event_post(ESP_HOSTED_EVENT,
+	h_event_post(ESP_HOSTED_EVENT,
 			ESP_HOSTED_EVENT_TRANSPORT_DOWN,
-			NULL, 0, HOSTED_BLOCK_MAX);
+			NULL, 0, H_BLOCK_MAX);
 	return ESP_OK;
 }
 
@@ -212,7 +213,7 @@ esp_remote_channel_t esp_hosted_add_channel(esp_remote_channel_config_t config,
 	transport_channel_t *t_chan = NULL;
 	esp_remote_channel_t eh_chan = NULL;
 
-	eh_chan = g_h.funcs->_h_calloc(sizeof(struct esp_remote_channel), 1);
+	eh_chan = h_calloc(1, sizeof(struct esp_remote_channel));
 	assert(eh_chan);
 
 	t_chan = transport_drv_add_channel(eh_chan, config->if_type, config->secure, tx, rx);
@@ -221,7 +222,7 @@ esp_remote_channel_t esp_hosted_add_channel(esp_remote_channel_config_t config,
 		eh_chan->t_chan = t_chan;
 		return eh_chan;
 	} else {
-		HOSTED_FREE(eh_chan);
+		h_free(eh_chan); eh_chan = NULL;
 	}
 
 	return NULL;
@@ -231,7 +232,7 @@ esp_err_t esp_hosted_remove_channel(esp_remote_channel_t eh_chan)
 {
 	if (eh_chan && eh_chan->t_chan) {
 		transport_drv_remove_channel(eh_chan->t_chan);
-		HOSTED_FREE(eh_chan);
+		h_free(eh_chan); eh_chan = NULL;
 		return ESP_OK;
 	}
 

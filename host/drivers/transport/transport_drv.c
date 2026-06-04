@@ -15,7 +15,6 @@
 #include "esp_hosted_host_fw_ver.h"
 #include "stats.h"
 #include "esp_hosted_log.h"
-#include "serial_drv.h"
 #include "serial_ll_if.h"
 #include "stats.h"
 #include "errno.h"

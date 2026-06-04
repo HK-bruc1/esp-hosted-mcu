@@ -18,5 +18,6 @@ h_err_t h_serial_if_init(void);
 void    h_serial_if_deinit(void);
 h_err_t h_serial_if_send(const uint8_t *data, uint16_t len);
 h_err_t h_serial_if_recv(uint8_t *data, uint16_t *len, int32_t timeout_ms);
+bool    h_serial_if_is_ready(void);
 
 #endif

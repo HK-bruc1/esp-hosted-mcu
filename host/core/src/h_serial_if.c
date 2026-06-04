@@ -9,14 +9,9 @@
 #include <string.h>
 #include <inttypes.h>
 
-/* Internal symbols from h_rpc_slave_if.c and serial_ll_if.c */
-struct serial_drv_handle_t;
-extern struct serial_drv_handle_t* serial_drv_open(const char *transport);
-extern int serial_drv_close(struct serial_drv_handle_t** handle);
-extern int serial_drv_write(struct serial_drv_handle_t* handle, uint8_t* buf, int in_count, int* out_count);
-extern uint8_t * serial_drv_read(struct serial_drv_handle_t* handle, uint32_t *out_nbyte);
-extern int rpc_platform_init(void);
-extern int rpc_platform_deinit(void);
+/* Control serial adapter (Path B — port adapter, not a contract)
+ * Defined in host/port/esp-idf/h_control_serial_adapter.c */
+#include "h_control_serial_adapter.h"
 
 static void *g_serial_handle = NULL;
 
@@ -60,16 +55,16 @@ h_err_t h_serial_if_init(void)
         return H_OK;
     }
 
-    g_serial_handle = serial_drv_open(SERIAL_IF_FILE);
+    g_serial_handle = h_control_serial_drv_open(SERIAL_IF_FILE);
     if (!g_serial_handle) {
-        H_LOGE("SERIAL", "serial_drv_open failed");
+        H_LOGE("SERIAL", "h_control_serial_drv_open failed");
         return H_FAIL;
     }
 
-    if (rpc_platform_init() != H_OK) {
-        H_LOGE("SERIAL", "rpc_platform_init failed");
-        struct serial_drv_handle_t* h = (struct serial_drv_handle_t*)g_serial_handle;
-        serial_drv_close(&h);
+    if (h_control_serial_platform_init() != H_OK) {
+        H_LOGE("SERIAL", "h_control_serial_platform_init failed");
+        h_control_serial_handle_t* h = (h_control_serial_handle_t*)g_serial_handle;
+        h_control_serial_drv_close(&h);
         g_serial_handle = NULL;
         return H_FAIL;
     }
@@ -78,12 +73,17 @@ h_err_t h_serial_if_init(void)
     return H_OK;
 }
 
+bool h_serial_if_is_ready(void)
+{
+    return (g_serial_handle != NULL);
+}
+
 void h_serial_if_deinit(void)
 {
     if (g_serial_handle) {
-        rpc_platform_deinit();
-        struct serial_drv_handle_t* h = (struct serial_drv_handle_t*)g_serial_handle;
-        serial_drv_close(&h);
+        h_control_serial_platform_deinit();
+        h_control_serial_handle_t* h = (h_control_serial_handle_t*)g_serial_handle;
+        h_control_serial_drv_close(&h);
         g_serial_handle = NULL;
     }
     H_LOGI("SERIAL", "Serial IF deinitialized");
@@ -114,8 +114,8 @@ h_err_t h_serial_if_send(const uint8_t *data, uint16_t len)
         return H_FAIL;
     }
 
-    if (serial_drv_write((struct serial_drv_handle_t*)g_serial_handle, write_buf, count, &out_count) != H_OK) {
-        /* Once serial_drv_write() is called, write_buf is owned by the serial or
+    if (h_control_serial_drv_write((h_control_serial_handle_t*)g_serial_handle, write_buf, count, &out_count) != H_OK) {
+        /* Once h_control_serial_drv_write() is called, write_buf is owned by the serial or
          * transport layer even if the call reports failure. */
         return H_FAIL;
     }
@@ -137,7 +137,7 @@ h_err_t h_serial_if_recv(uint8_t *data, uint16_t *len, int32_t timeout_ms)
     }
 
     uint32_t out_nbyte = 0;
-    uint8_t *rx_data = serial_drv_read((struct serial_drv_handle_t*)g_serial_handle, &out_nbyte);
+    uint8_t *rx_data = h_control_serial_drv_read((h_control_serial_handle_t*)g_serial_handle, &out_nbyte);
 
     if (!rx_data || out_nbyte == 0) {
         return H_ERR_TIMEOUT;

@@ -18,6 +18,7 @@
 extern void *hosted_sdio_init(void);
 extern int   hosted_sdio_deinit(void *ctx);
 extern int   hosted_sdio_card_init(void *ctx, bool show_config);
+extern int   hosted_sdio_card_deinit(void *ctx);
 extern int   hosted_sdio_read_reg(void *ctx, uint32_t reg, uint8_t *data,
                                   uint16_t size, bool lock_required);
 extern int   hosted_sdio_write_reg(void *ctx, uint32_t reg, uint8_t *data,
@@ -54,6 +55,10 @@ static int h_sdio_init_adapter(void **out_handle)
 
 static int h_sdio_deinit_adapter(void *handle)
 {
+    /* Card deinit releases DMA-aligned buffers allocated by sdmmc_card_init.
+     * Fold into adapter deinit so that driver-level h_transport_deinit()
+     * handles the full SDIO teardown in one call. */
+    hosted_sdio_card_deinit(handle);
     int ret = hosted_sdio_deinit(handle);
     return (ret == 0) ? H_OK : H_FAIL;
 }
@@ -94,10 +99,15 @@ static int h_sdio_write_block_adapter(void *handle, uint32_t reg,
 }
 
 /* hosted_sdio_wait_slave_intr takes FreeRTOS ticks; contract says timeout_ms.
- * The caller is responsible for converting ms to ticks before calling. */
+ * H_BLOCK_FOREVER (-1) is defined in h_wrapper.h as the sentinel for
+ * "block forever". When cast to uint32_t it becomes UINT32_MAX; we detect
+ * this and substitute portMAX_DELAY to avoid pdMS_TO_TICKS overflow. */
 static int h_sdio_wait_intr_adapter(void *handle, uint32_t timeout_ms)
 {
-    int ret = hosted_sdio_wait_slave_intr(handle, pdMS_TO_TICKS(timeout_ms));
+    uint32_t ticks = (timeout_ms == (uint32_t)H_BLOCK_FOREVER)
+                     ? portMAX_DELAY
+                     : pdMS_TO_TICKS(timeout_ms);
+    int ret = hosted_sdio_wait_slave_intr(handle, ticks);
     return (ret == 0) ? H_OK : H_ERR_TIMEOUT;
 }
 

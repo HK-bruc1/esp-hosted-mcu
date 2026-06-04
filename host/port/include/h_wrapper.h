@@ -130,6 +130,9 @@ typedef enum {
 #define h_spi_hd_write_dma(h, d, s, l)      (g_h_transport.spi_hd_write_dma(h, d, s, l))
 #define h_spi_hd_send_cmd9(h)               (g_h_transport.spi_hd_send_cmd9(h))
 
+#define h_sdio_card_init(h, sc)          (g_h_transport.sdio_card_init(h, sc))
+#define h_sdio_read_reg(h,r,d,s,l)       (g_h_transport.sdio_read_reg(h,r,d,s,l))
+#define h_sdio_write_reg(h,r,d,s,l)      (g_h_transport.sdio_write_reg(h,r,d,s,l))
 #define h_sdio_read_block(h,r,d,s,l)     (g_h_transport.sdio_read_block(h,r,d,s,l))
 #define h_sdio_write_block(h,r,d,s,l)    (g_h_transport.sdio_write_block(h,r,d,s,l))
 #define h_sdio_wait_intr(h, to)          (g_h_transport.sdio_wait_intr(h, to))
@@ -140,6 +143,7 @@ typedef enum {
 
 #define h_uart_read(h, d, s)             (g_h_transport.uart_read(h, d, s))
 #define h_uart_write(h, d, s)            (g_h_transport.uart_write(h, d, s))
+#define h_uart_flush(h)                  (g_h_transport.uart_flush(h))
 
 #define h_gpio_config(pin, mode)         (g_h_transport.gpio_config(pin, mode))
 #define h_gpio_set_intr(pin, t, isr, a)  (g_h_transport.gpio_set_intr(pin, t, isr, a))

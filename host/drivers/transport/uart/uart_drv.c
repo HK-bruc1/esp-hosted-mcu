@@ -19,6 +19,7 @@
 #include "power_save_drv.h"
 #include "esp_hosted_bt.h"
 #include "port_esp_hosted_host_os.h"
+#include "h_wrapper.h"
 
 #include "mempool.h"
 #include "transport_util.h"
@@ -87,8 +88,8 @@ static inline void h_uart_mempool_create(int tx_q_size, int rx_q_size)
 		.alignment_in_bytes = HOSTED_MEM_ALIGNMENT_64,
 		.malloc = transport_util_malloc,
 		.calloc = transport_util_calloc,
-		.memset = g_h.funcs->_h_memset,
-		.free   = g_h.funcs->_h_free,
+		.memset = h_memset_fn,
+		.free   = h_free_fn,
 	};
 	buf_mp_g = hosted_mempool_create(&config);
 	assert(buf_mp_g);
@@ -176,11 +177,11 @@ static int h_uart_write_packet(interface_buffer_handle_t *buf_handle)
 			// adjust actual payload len
 			len -= 1;
 			payload_header->len = htole16(len);
-			g_h.funcs->_h_memcpy(payload, &buf_handle->payload[1], len);
+			h_memcpy(payload, &buf_handle->payload[1], len);
 		}
 	} else {
 		if (!buf_handle->payload_zcopy) {
-			g_h.funcs->_h_memcpy(payload, buf_handle->payload, len);
+			h_memcpy(payload, buf_handle->payload, len);
 		}
 	}
 
@@ -190,7 +191,7 @@ static int h_uart_write_packet(interface_buffer_handle_t *buf_handle)
 #endif
 
 	tx_len_to_send = len + sizeof(struct esp_payload_header);
-	tx_len = g_h.funcs->_h_uart_write(uart_handle, sendbuf, tx_len_to_send);
+	tx_len = h_uart_write(uart_handle, sendbuf, tx_len_to_send);
 	if (tx_len != tx_len_to_send) {
 		ESP_LOGE(TAG, "failed to send uart data");
 		result = ESP_FAIL;
@@ -218,18 +219,18 @@ static void h_uart_write_task(void const* pvParameters)
 	uint8_t tx_needed = 1;
 
 	while (!uart_start_write_thread)
-		g_h.funcs->_h_msleep(10);
+		h_msleep(10);
 
 	ESP_LOGD(TAG, "h_uart_write_task: write thread started");
 
 	while (1) {
 		/* Check if higher layers have anything to transmit */
-		g_h.funcs->_h_get_semaphore(sem_to_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_to_slave_queue, H_BLOCK_MAX);
 
 		/* Tx msg is present as per sem */
-		if (g_h.funcs->_h_dequeue_item(to_slave_queue[PRIO_Q_SERIAL], &buf_handle, 0))
-			if (g_h.funcs->_h_dequeue_item(to_slave_queue[PRIO_Q_BT], &buf_handle, 0))
-				if (g_h.funcs->_h_dequeue_item(to_slave_queue[PRIO_Q_OTHERS], &buf_handle, 0)) {
+		if (h_queue_recv(to_slave_queue[PRIO_Q_SERIAL], &buf_handle, 0))
+			if (h_queue_recv(to_slave_queue[PRIO_Q_BT], &buf_handle, 0))
+				if (h_queue_recv(to_slave_queue[PRIO_Q_OTHERS], &buf_handle, 0)) {
 					tx_needed = 0; /* No Tx msg */
 				}
 
@@ -275,11 +276,11 @@ static void h_uart_process_rx_task(void const* pvParameters)
 	}
 
 	while (1) {
-		g_h.funcs->_h_get_semaphore(sem_from_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_from_slave_queue, H_BLOCK_MAX);
 
-		if (g_h.funcs->_h_dequeue_item(from_slave_queue[PRIO_Q_SERIAL], &buf_handle_l, 0))
-			if (g_h.funcs->_h_dequeue_item(from_slave_queue[PRIO_Q_BT], &buf_handle_l, 0))
-				if (g_h.funcs->_h_dequeue_item(from_slave_queue[PRIO_Q_OTHERS], &buf_handle_l, 0)) {
+		if (h_queue_recv(from_slave_queue[PRIO_Q_SERIAL], &buf_handle_l, 0))
+			if (h_queue_recv(from_slave_queue[PRIO_Q_BT], &buf_handle_l, 0))
+				if (h_queue_recv(from_slave_queue[PRIO_Q_OTHERS], &buf_handle_l, 0)) {
 					ESP_LOGI(TAG, "No element in any queue found");
 					continue;
 				}
@@ -296,7 +297,7 @@ static void h_uart_process_rx_task(void const* pvParameters)
 #if 1
 			if (chan_arr[buf_handle->if_type] && chan_arr[buf_handle->if_type]->rx) {
 				/* TODO : Need to abstract heap_caps_malloc */
-				uint8_t * copy_payload = (uint8_t *)g_h.funcs->_h_malloc(buf_handle->payload_len);
+				uint8_t * copy_payload = (uint8_t *)h_malloc(buf_handle->payload_len);
 				assert(copy_payload);
 				assert(buf_handle->payload_len);
 				assert(buf_handle->payload);
@@ -307,11 +308,11 @@ static void h_uart_process_rx_task(void const* pvParameters)
 						copy_payload, copy_payload, buf_handle->payload_len);
 #ifndef ESP_WIFI_REMOTE_VERSION // not defined in older versions of wifi-remote
 				if (unlikely(ret))
-					HOSTED_FREE(copy_payload);
+					h_free(copy_payload); copy_payload = NULL;
 #else
 #if ESP_WIFI_REMOTE_VERSION < ESP_WIFI_REMOTE_VERSION_VAL(1,3,1)
 				if (unlikely(ret))
-					HOSTED_FREE(copy_payload);
+					h_free(copy_payload); copy_payload = NULL;
 #else
 				(void)ret; // to silence 'unused variable' warning
 #endif
@@ -388,8 +389,8 @@ static esp_err_t push_to_rx_queue(uint8_t * rxbuff, uint16_t len, uint16_t offse
 		pkt_prio = PRIO_Q_BT;
 	/* else OTHERS by default */
 
-	g_h.funcs->_h_queue_item(from_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
-	g_h.funcs->_h_post_semaphore(sem_from_slave_queue);
+	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
+	h_sem_give(sem_from_slave_queue);
 
 	return ESP_OK;
 }
@@ -477,7 +478,7 @@ static void h_uart_read_task(void const* pvParameters)
 
 	while (1) {
 		// get the header
-		bytes_read = g_h.funcs->_h_uart_read(uart_handle, uart_scratch_buf,
+		bytes_read = h_uart_read(uart_handle, uart_scratch_buf,
 				sizeof(struct esp_payload_header));
 		ESP_LOGD(TAG, "Read %d bytes (header)", bytes_read);
 		if (bytes_read < sizeof(struct esp_payload_header)) {
@@ -499,7 +500,7 @@ static void h_uart_read_task(void const* pvParameters)
 
 		// get the data, if any
 		if (len) {
-			bytes_read = g_h.funcs->_h_uart_read(uart_handle, &uart_scratch_buf[offset], len);
+			bytes_read = h_uart_read(uart_handle, &uart_scratch_buf[offset], len);
 			ESP_LOGD(TAG, "Read %d bytes (payload)", bytes_read);
 			if (bytes_read < len) {
 				ESP_LOGE(TAG, "Failed to read payload");
@@ -547,42 +548,59 @@ void *bus_init_internal(void)
 {
 	uint8_t prio_q_idx = 0;
 
-	sem_to_slave_queue = g_h.funcs->_h_create_semaphore(H_UART_TX_QUEUE_SIZE*MAX_PRIORITY_QUEUES);
-	assert(sem_to_slave_queue);
-	g_h.funcs->_h_get_semaphore(sem_to_slave_queue, 0);
+	if (h_sem_create(H_UART_TX_QUEUE_SIZE*MAX_PRIORITY_QUEUES, 0, &sem_to_slave_queue) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sem_to_slave_queue");
+		goto init_cleanup;
+	}
 
-	sem_from_slave_queue = g_h.funcs->_h_create_semaphore(H_UART_RX_QUEUE_SIZE*MAX_PRIORITY_QUEUES);
-	assert(sem_from_slave_queue);
-	g_h.funcs->_h_get_semaphore(sem_from_slave_queue, 0);
+	if (h_sem_create(H_UART_RX_QUEUE_SIZE*MAX_PRIORITY_QUEUES, 0, &sem_from_slave_queue) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sem_from_slave_queue");
+		goto init_cleanup;
+	}
 
 	for (prio_q_idx=0; prio_q_idx<MAX_PRIORITY_QUEUES;prio_q_idx++) {
 		/* Queue - rx */
-		from_slave_queue[prio_q_idx] = g_h.funcs->_h_create_queue(H_UART_RX_QUEUE_SIZE, sizeof(interface_buffer_handle_t));
-		assert(from_slave_queue[prio_q_idx]);
+		if (h_queue_create(H_UART_RX_QUEUE_SIZE, sizeof(interface_buffer_handle_t), &from_slave_queue[prio_q_idx]) != H_OK) {
+			ESP_LOGE(TAG, "Failed to create rx queue[%u]", prio_q_idx);
+			goto init_cleanup;
+		}
 
 		/* Queue - tx */
-		to_slave_queue[prio_q_idx] = g_h.funcs->_h_create_queue(H_UART_TX_QUEUE_SIZE, sizeof(interface_buffer_handle_t));
-		assert(to_slave_queue[prio_q_idx]);
+		if (h_queue_create(H_UART_TX_QUEUE_SIZE, sizeof(interface_buffer_handle_t), &to_slave_queue[prio_q_idx]) != H_OK) {
+			ESP_LOGE(TAG, "Failed to create tx queue[%u]", prio_q_idx);
+			goto init_cleanup;
+		}
 	}
 
 	h_uart_mempool_create(H_UART_TX_QUEUE_SIZE, H_UART_RX_QUEUE_SIZE);
 
-	uart_handle = g_h.funcs->_h_bus_init();
-	if (!uart_handle) {
+	if (h_transport_init(&uart_handle) != H_OK || !uart_handle) {
 		ESP_LOGE(TAG, "could not create uart handle, exiting\n");
-		assert(uart_handle);
+		goto init_cleanup;
 	}
 
-	h_uart_process_rx_task_info = g_h.funcs->_h_thread_create("uart_process_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_process_rx_task, NULL);
+	if (h_thread_create("uart_process_rx",
+		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_process_rx_task, NULL, &h_uart_process_rx_task_info) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create uart_process_rx thread");
+		goto init_cleanup;
+	}
 
-	h_uart_read_task_info = g_h.funcs->_h_thread_create("uart_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_read_task, NULL);
+	if (h_thread_create("uart_rx",
+		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_read_task, NULL, &h_uart_read_task_info) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create uart_rx thread");
+		goto init_cleanup;
+	}
 
-	h_uart_write_task_info = g_h.funcs->_h_thread_create("uart_tx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_write_task, NULL);
+	if (h_thread_create("uart_tx",
+		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_write_task, NULL, &h_uart_write_task_info) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create uart_tx thread");
+		goto init_cleanup;
+	}
 
 	return uart_handle;
+init_cleanup:
+	bus_deinit_internal(uart_handle);
+	return NULL;
 }
 
 /**
@@ -630,8 +648,8 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 	else if (buf_handle.if_type == ESP_HCI_IF)
 		pkt_prio = PRIO_Q_BT;
 
-	g_h.funcs->_h_queue_item(to_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
-	g_h.funcs->_h_post_semaphore(sem_to_slave_queue);
+	h_queue_send(to_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
+	h_sem_give(sem_to_slave_queue);
 
 #if ESP_PKT_STATS
 	if (buf_handle.if_type == ESP_STA_IF)
@@ -647,41 +665,41 @@ void bus_deinit_internal(void *bus_handle)
 
 	/* Stop threads */
 	if (h_uart_write_task_info) {
-		g_h.funcs->_h_thread_cancel(h_uart_write_task_info);
+		h_thread_delete(h_uart_write_task_info);
 		h_uart_write_task_info = NULL;
 	}
 
 	if (h_uart_read_task_info) {
-		g_h.funcs->_h_thread_cancel(h_uart_read_task_info);
+		h_thread_delete(h_uart_read_task_info);
 		h_uart_read_task_info = NULL;
 	}
 
 	if (h_uart_process_rx_task_info) {
-		g_h.funcs->_h_thread_cancel(h_uart_process_rx_task_info);
+		h_thread_delete(h_uart_process_rx_task_info);
 		h_uart_process_rx_task_info = NULL;
 	}
 
 	/* Clean up queues */
 	for (prio_q_idx = 0; prio_q_idx < MAX_PRIORITY_QUEUES; prio_q_idx++) {
 		if (from_slave_queue[prio_q_idx]) {
-			g_h.funcs->_h_destroy_queue(from_slave_queue[prio_q_idx]);
+			h_queue_delete(from_slave_queue[prio_q_idx]);
 			from_slave_queue[prio_q_idx] = NULL;
 		}
 
 		if (to_slave_queue[prio_q_idx]) {
-			g_h.funcs->_h_destroy_queue(to_slave_queue[prio_q_idx]);
+			h_queue_delete(to_slave_queue[prio_q_idx]);
 			to_slave_queue[prio_q_idx] = NULL;
 		}
 	}
 
 	/* Clean up semaphores */
 	if (sem_to_slave_queue) {
-		g_h.funcs->_h_destroy_semaphore(sem_to_slave_queue);
+		h_sem_delete(sem_to_slave_queue);
 		sem_to_slave_queue = NULL;
 	}
 
 	if (sem_from_slave_queue) {
-		g_h.funcs->_h_destroy_semaphore(sem_from_slave_queue);
+		h_sem_delete(sem_from_slave_queue);
 		sem_from_slave_queue = NULL;
 	}
 
@@ -689,7 +707,7 @@ void bus_deinit_internal(void *bus_handle)
 	if (uart_handle) {
 		ESP_LOGI(TAG, "Deinitializing UART bus");
 		if (bus_handle) {
-			g_h.funcs->_h_bus_deinit(bus_handle);
+			h_transport_deinit(bus_handle);
 		}
 		uart_handle = NULL;
 	}
@@ -714,19 +732,19 @@ int ensure_slave_bus_ready(void *bus_handle)
 	if (!esp_hosted_woke_from_power_save()) {
 		/* Reset the slave */
 		ESP_LOGI(TAG, "Resetting slave on UART bus with pin %d", reset_pin.pin);
-		g_h.funcs->_h_config_gpio(reset_pin.port, reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
-		g_h.funcs->_h_write_gpio(reset_pin.port, reset_pin.pin, H_RESET_VAL_ACTIVE);
-		g_h.funcs->_h_msleep(10);
-		g_h.funcs->_h_write_gpio(reset_pin.port, reset_pin.pin, H_RESET_VAL_INACTIVE);
-		g_h.funcs->_h_msleep(10);
-		g_h.funcs->_h_write_gpio(reset_pin.port, reset_pin.pin, H_RESET_VAL_ACTIVE);
+		h_gpio_config(reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
+		h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
+		h_msleep(10);
+		h_gpio_write(reset_pin.pin, H_RESET_VAL_INACTIVE);
+		h_msleep(10);
+		h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
 		// flush input
 		if (uart_handle) {
-			g_h.funcs->_h_uart_flush_input(uart_handle);
+			h_uart_flush(uart_handle);
 		} else {
 			ESP_LOGW(TAG, "uart handle is NULL: cannot flush");
 		}
-		g_h.funcs->_h_msleep(1500);
+		h_msleep(1500);
 	} else {
 		stop_host_power_save();
 	}

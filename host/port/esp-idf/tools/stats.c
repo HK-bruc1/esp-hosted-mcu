@@ -14,6 +14,7 @@
 #include "esp_hosted_transport_init.h"
 #include "esp_hosted_os_abstraction.h"
 #include "port_esp_hosted_host_os.h"
+#include "h_wrapper.h"
 
 // use mempool and zero copy for Tx
 #include "mempool.h"
@@ -59,7 +60,7 @@ static struct mempool * buf_mp_g = NULL;
 void stats_mempool_free(void* ptr)
 {
 #if DISABLE_MEMPOOL
-	g_h.funcs->_h_free(ptr);
+	h_free(ptr);
 #else
 	mempool_free(buf_mp_g, ptr);
 #endif
@@ -70,7 +71,7 @@ void test_raw_tp_cleanup(void)
 	int ret = 0;
 
 	if (log_raw_tp_stats_timer_running) {
-		ret = g_h.funcs->_h_timer_stop(hosted_timer_handler);
+		ret = h_timer_stop(hosted_timer_handler);
 		if (!ret) {
 			log_raw_tp_stats_timer_running = 0;
 		}
@@ -78,8 +79,8 @@ void test_raw_tp_cleanup(void)
 	}
 
 	if (raw_tp_tx_task_id) {
-		ret = g_h.funcs->_h_thread_cancel(raw_tp_tx_task_id);
-		raw_tp_tx_task_id = 0;
+		ret = h_thread_delete(raw_tp_tx_task_id);
+		raw_tp_tx_task_id = NULL;
 	}
 }
 
@@ -112,7 +113,7 @@ static void raw_tp_tx_task(void const* pvParameters)
 	uint8_t *raw_tp_tx_buf = NULL;
 	uint32_t *ptr = NULL;
 	uint32_t i = 0;
-	g_h.funcs->_h_sleep(5);
+	h_msleep(5000);
 
 #if !DISABLE_MEMPOOL
 	buf_mp_g = mempool_create(MAX_TRANSPORT_BUFFER_SIZE);
@@ -124,7 +125,7 @@ static void raw_tp_tx_task(void const* pvParameters)
 	while (1) {
 
 #if CONFIG_H_LOWER_MEMCOPY
-		raw_tp_tx_buf = (uint8_t*)g_h.funcs->_h_calloc(1, MAX_TRANSPORT_BUFFER_SIZE);
+		raw_tp_tx_buf = (uint8_t*)h_calloc(1, MAX_TRANSPORT_BUFFER_SIZE);
 
 		ptr = (uint32_t*) raw_tp_tx_buf;
 		for (i=0; i<(TEST_RAW_TP__BUF_SIZE/4-1); i++, ptr++)
@@ -134,8 +135,8 @@ static void raw_tp_tx_task(void const* pvParameters)
 
 #else
 #if DISABLE_MEMPOOL
-		raw_tp_tx_buf = g_h.funcs->_h_malloc_align(MAX_TRANSPORT_BUFFER_SIZE, HOSTED_MEM_ALIGNMENT_64);
-		g_h.funcs->_h_memset(raw_tp_tx_buf, 0, MAX_TRANSPORT_BUFFER_SIZE);
+		raw_tp_tx_buf = h_malloc_align(MAX_TRANSPORT_BUFFER_SIZE, HOSTED_MEM_ALIGNMENT_64);
+		h_memset(raw_tp_tx_buf, 0, MAX_TRANSPORT_BUFFER_SIZE);
 #else
 		raw_tp_tx_buf = mempool_alloc(buf_mp_g, MAX_TRANSPORT_BUFFER_SIZE, true);
 #endif
@@ -150,7 +151,7 @@ static void raw_tp_tx_task(void const* pvParameters)
 			continue;
 		}
 #if CONFIG_H_LOWER_MEMCOPY
-		g_h.funcs->_h_free(raw_tp_tx_buf);
+		h_free(raw_tp_tx_buf);
 #endif
 		test_raw_tx_len += (TEST_RAW_TP__BUF_SIZE);
 		seq_num++;
@@ -162,8 +163,9 @@ static void process_raw_tp_flags(uint8_t cap)
 	test_raw_tp_cleanup();
 
 	if (test_raw_tp) {
-		hosted_timer_handler = g_h.funcs->_h_timer_start("raw_tp_timer", SEC_TO_MILLISEC(TEST_RAW_TP__TIMEOUT),
-				H_TIMER_TYPE_PERIODIC, raw_tp_timer_func, NULL);
+		h_timer_create("raw_tp_timer", &hosted_timer_handler);
+		h_timer_start(hosted_timer_handler, SEC_TO_MILLISEC(TEST_RAW_TP__TIMEOUT),
+				true, raw_tp_timer_func, NULL);
 		if (!hosted_timer_handler) {
 			ESP_LOGE(TAG, "Failed to create timer\n\r");
 			return;
@@ -173,8 +175,9 @@ static void process_raw_tp_flags(uint8_t cap)
 		ESP_LOGD(TAG, "capabilities: %d", cap);
 		if ((cap & ESP_TEST_RAW_TP__HOST_TO_ESP) ||
 			(cap & ESP_TEST_RAW_TP__BIDIRECTIONAL)) {
-			raw_tp_tx_task_id = g_h.funcs->_h_thread_create("raw_tp_tx", DFLT_TASK_PRIO,
-				RAW_TP_TX_TASK_STACK_SIZE, raw_tp_tx_task, NULL);
+			h_thread_create("raw_tp_tx", DFLT_TASK_PRIO,
+				RAW_TP_TX_TASK_STACK_SIZE, raw_tp_tx_task, NULL,
+				&raw_tp_tx_task_id);
 			assert(raw_tp_tx_task_id);
 		}
 	}
@@ -234,8 +237,9 @@ void create_debugging_tasks(void)
 {
 #if ESP_PKT_STATS
 		ESP_LOGI(TAG, "Start Pkt_stats reporting thread [timer: %u sec]", ESP_PKT_STATS_REPORT_INTERVAL);
-		pkt_stats_thread = g_h.funcs->_h_timer_start("pkt_stats_timer", SEC_TO_MILLISEC(ESP_PKT_STATS_REPORT_INTERVAL),
-				H_TIMER_TYPE_PERIODIC, stats_timer_func, NULL);
+		h_timer_create("pkt_stats_timer", &pkt_stats_thread);
+		h_timer_start(pkt_stats_thread, SEC_TO_MILLISEC(ESP_PKT_STATS_REPORT_INTERVAL),
+				true, stats_timer_func, NULL);
 		assert(pkt_stats_thread);
 #endif
 }

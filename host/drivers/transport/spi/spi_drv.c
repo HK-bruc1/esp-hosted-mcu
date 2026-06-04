@@ -8,7 +8,6 @@
 #include "mempool.h"
 #include "transport_drv.h"
 #include "spi_drv.h"
-#include "serial_drv.h"
 #include "esp_hosted_transport.h"
 #include "esp_hosted_log.h"
 #include "stats.h"
@@ -697,12 +696,12 @@ static void spi_process_rx_task(void const* pvParameters)
 						copy_payload, copy_payload, buf_handle->payload_len);
 				// only free memory when using older versions of wifi-remote
 #ifndef ESP_WIFI_REMOTE_VERSION // not defined in older versions of wifi-remote
- 				if (unlikely(ret))
- 					HOSTED_FREE(copy_payload);
+				if (unlikely(ret))
+					h_free(copy_payload); copy_payload = NULL;
 #else
 #if ESP_WIFI_REMOTE_VERSION < ESP_WIFI_REMOTE_VERSION_VAL(1,3,1)
 				if (unlikely(ret))
-					HOSTED_FREE(copy_payload);
+					h_free(copy_payload); copy_payload = NULL;
 #else
 				(void)ret; // to silence 'unused variable' warning
 #endif

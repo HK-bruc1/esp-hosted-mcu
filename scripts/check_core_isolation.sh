@@ -21,7 +21,7 @@
 #                       * 门槛 4 WP 4.5 — drop H_BUILD_TESTS branch so the real
 #                                          production path is what mock exercises.
 #   - h_rpc_wrap.c / h_rpc_req.c / h_rpc_rsp.c / h_rpc_evt.c /
-#     h_transport_drv.c / h_rpc_utils.c / h_rpc_slave_if.c
+#     h_transport_drv.c / h_rpc_utils.c
 #                   — 已在此脚本下验证 portable 性,但 mock 生产路径仍受旧头文件
 #                     链影响,待门槛 4 解耦后纳入持续编译集合。
 set -euo pipefail
@@ -34,7 +34,6 @@ CORE_PORTABLE_SCOPE=(
     host/core/src/h_api.c
     host/core/src/h_event.c
     host/core/src/h_serial_if.c
-    host/core/src/h_rpc_slave_if.c
     host/core/src/h_rpc_utils.c
     host/core/src/h_transport_util.c
     host/core/src/h_rpc_core.c
@@ -111,13 +110,12 @@ fi
 
 echo "OK: core portable boundary is ESP-IDF-free"
 echo ""
-echo "── portable 集合(host/core/src/ 总文件数 13)──"
+echo "── portable 集合(host/core/src/ 总文件数 12)──"
 PORTABLE_SRCS=(
     host/core/src/h_init.c
     host/core/src/h_api.c
     host/core/src/h_event.c
     host/core/src/h_serial_if.c
-    host/core/src/h_rpc_slave_if.c
     host/core/src/h_rpc_utils.c
     host/core/src/h_transport_util.c
     host/core/src/h_rpc_core.c
@@ -130,5 +128,5 @@ PORTABLE_SRCS=(
 for f in "${PORTABLE_SRCS[@]}"; do
     echo "  ✓ $f"
 done
-echo "  覆盖率: ${#PORTABLE_SRCS[@]}/13 = $(awk "BEGIN { printf \"%.0f%%\", ${#PORTABLE_SRCS[@]} / 13 * 100 }")"
+echo "  覆盖率: ${#PORTABLE_SRCS[@]}/12 = $(awk "BEGIN { printf \"%.0f%%\", ${#PORTABLE_SRCS[@]} / 12 * 100 }")"
 echo "(规范定义见 docs/felix/9.Host通用化实施总路线图.md §三个口径)"

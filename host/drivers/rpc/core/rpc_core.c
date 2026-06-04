@@ -10,7 +10,6 @@
 #include "rpc_core.h"
 #include "esp_hosted_rpc.h"
 #include "serial_if.h"
-#include "serial_drv.h"
 #include <unistd.h>
 #include "esp_task.h"
 #include "port_esp_hosted_host_config.h"

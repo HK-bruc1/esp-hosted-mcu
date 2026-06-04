@@ -17,12 +17,13 @@ extern "C" {
 #include "transport_drv.h"
 #endif
 #include "port_esp_hosted_host_os.h"
+#include "h_types.h"
 
 struct serial_ll_operations;
 
 /* serial interface handle */
 typedef struct serial_handle_s {
-	queue_handle_t queue;
+	h_queue_t queue;
 	uint8_t if_type;
 	uint8_t if_num;
 	struct serial_ll_operations *fops;

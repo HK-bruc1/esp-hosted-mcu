@@ -76,7 +76,6 @@
 #include "string.h"
 #include "sdio_drv.h"
 #include "sdio_reg.h"
-#include "serial_drv.h"
 #include "stats.h"
 #include "esp_hosted_log.h"
 #include "hci_drv.h"
@@ -91,6 +90,7 @@
 
 #include "mempool.h"
 #include "transport_util.h"
+#include "h_wrapper.h"
 
 static const char TAG[] = "H_SDIO_DRV";
 
@@ -151,8 +151,8 @@ static const char TAG[] = "H_SDIO_DRV";
 #if defined(USE_DRIVER_LOCK)
 static void * sdio_bus_lock;
 
-#define SDIO_DRV_LOCK()   g_h.funcs->_h_lock_mutex(sdio_bus_lock, HOSTED_BLOCK_MAX);
-#define SDIO_DRV_UNLOCK() g_h.funcs->_h_unlock_mutex(sdio_bus_lock);
+#define SDIO_DRV_LOCK()   h_mutex_lock(sdio_bus_lock, H_BLOCK_MAX);
+#define SDIO_DRV_UNLOCK() h_mutex_unlock(sdio_bus_lock);
 
 #else
 #define SDIO_DRV_LOCK()
@@ -248,8 +248,8 @@ static inline void sdio_mempool_create(int tx_q_size, int rx_q_size)
 		.alignment_in_bytes = HOSTED_MEM_ALIGNMENT_64,
 		.malloc = transport_util_malloc,
 		.calloc = transport_util_calloc,
-		.memset = g_h.funcs->_h_memset,
-		.free   = g_h.funcs->_h_free,
+		.memset = h_memset_fn,
+		.free   = h_free_fn,
 	};
 	buf_mp_g = hosted_mempool_create(&config);
 	assert(buf_mp_g);
@@ -280,22 +280,22 @@ void bus_deinit_internal(void *bus_handle)
 	uint8_t prio_q_idx = 0;
 
 	if (sdio_read_thread) {
-		g_h.funcs->_h_thread_cancel(sdio_read_thread);
+		h_thread_delete(sdio_read_thread);
 		sdio_read_thread = NULL;
 	}
 
 	if (sdio_write_thread) {
-		g_h.funcs->_h_thread_cancel(sdio_write_thread);
+		h_thread_delete(sdio_write_thread);
 		sdio_write_thread = NULL;
 	}
 
 	if (sdio_process_rx_thread) {
-		g_h.funcs->_h_thread_cancel(sdio_process_rx_thread);
+		h_thread_delete(sdio_process_rx_thread);
 		sdio_process_rx_thread = NULL;
 	}
 
 	if (sdio_rx_buf_thread) {
-		g_h.funcs->_h_thread_cancel(sdio_rx_buf_thread);
+		h_thread_delete(sdio_rx_buf_thread);
 		sdio_rx_buf_thread = NULL;
 	}
 
@@ -304,7 +304,7 @@ void bus_deinit_internal(void *bus_handle)
 			/* Drain to_slave_queue before destroying to prevent buffer leaks */
 			interface_buffer_handle_t buf_handle;
 			int count = 0;
-			while (g_h.funcs->_h_dequeue_item(to_slave_queue[prio_q_idx], &buf_handle, 0) == 0) {
+			while (h_queue_recv(to_slave_queue[prio_q_idx], &buf_handle, 0) == 0) {
 				/* Free buffer using the provided free function */
 				if (buf_handle.priv_buffer_handle && buf_handle.free_buf_handle) {
 					buf_handle.free_buf_handle(buf_handle.priv_buffer_handle);
@@ -312,14 +312,14 @@ void bus_deinit_internal(void *bus_handle)
 				}
 			}
 			ESP_LOGD(TAG, "Drained %d buffers from to_slave_queue[%d]", count, prio_q_idx);
-			g_h.funcs->_h_destroy_queue(to_slave_queue[prio_q_idx]);
+			h_queue_delete(to_slave_queue[prio_q_idx]);
 			to_slave_queue[prio_q_idx] = NULL;
 		}
 		if (from_slave_queue[prio_q_idx]) {
 			/* Drain from_slave_queue before destroying to prevent buffer leaks */
 			interface_buffer_handle_t buf_handle;
 			int count = 0;
-			while (g_h.funcs->_h_dequeue_item(from_slave_queue[prio_q_idx], &buf_handle, 0) == 0) {
+			while (h_queue_recv(from_slave_queue[prio_q_idx], &buf_handle, 0) == 0) {
 				/* Free buffer using the provided free function */
 				if (buf_handle.priv_buffer_handle && buf_handle.free_buf_handle) {
 					buf_handle.free_buf_handle(buf_handle.priv_buffer_handle);
@@ -327,34 +327,34 @@ void bus_deinit_internal(void *bus_handle)
 				}
 			}
 			ESP_LOGD(TAG, "Drained %d buffers from from_slave_queue[%d]", count, prio_q_idx);
-			g_h.funcs->_h_destroy_queue(from_slave_queue[prio_q_idx]);
+			h_queue_delete(from_slave_queue[prio_q_idx]);
 			from_slave_queue[prio_q_idx] = NULL;
 		}
 	}
 
 	if (sem_to_slave_queue) {
-		g_h.funcs->_h_destroy_semaphore(sem_to_slave_queue);
+		h_sem_delete(sem_to_slave_queue);
 		sem_to_slave_queue = NULL;
 	}
 	if (sem_from_slave_queue) {
-		g_h.funcs->_h_destroy_semaphore(sem_from_slave_queue);
+		h_sem_delete(sem_from_slave_queue);
 		sem_from_slave_queue = NULL;
 	}
 	if (sem_double_buf_xfer_data) {
-		g_h.funcs->_h_destroy_semaphore(sem_double_buf_xfer_data);
+		h_sem_delete(sem_double_buf_xfer_data);
 		sem_double_buf_xfer_data = NULL;
 	}
 
 #if DO_COMBINED_REG_READ
     if (reg_buf) {
-        g_h.funcs->_h_free_align(reg_buf);
+        h_free_align(reg_buf);
         reg_buf = NULL;
     }
 #endif
 
 #if defined(USE_DRIVER_LOCK)
 	if (sdio_bus_lock) {
-		g_h.funcs->_h_destroy_mutex(sdio_bus_lock);
+		h_mutex_delete(sdio_bus_lock);
 		sdio_bus_lock = NULL;
 	}
 #endif
@@ -362,13 +362,13 @@ void bus_deinit_internal(void *bus_handle)
 	// free memory allocated in double buffering structs
 	if (double_buf.buffer[0].buf) {
 		ESP_LOGI(TAG, "free buffer[0] %p", double_buf.buffer[0].buf);
-		g_h.funcs->_h_free_align(double_buf.buffer[0].buf);
+		h_free_align(double_buf.buffer[0].buf);
 		double_buf.buffer[0].buf = NULL;
 		double_buf.buffer[0].buf_size = 0;
 	}
 	if (double_buf.buffer[1].buf) {
 		ESP_LOGI(TAG, "free buffer[1] %p", double_buf.buffer[1].buf);
-		g_h.funcs->_h_free_align(double_buf.buffer[1].buf);
+		h_free_align(double_buf.buffer[1].buf);
 		double_buf.buffer[1].buf = NULL;
 		double_buf.buffer[1].buf_size = 0;
 	}
@@ -386,8 +386,7 @@ void bus_deinit_internal(void *bus_handle)
 	sdio_mempool_destroy();
 	if (bus_handle) {
 		/* Free DMA aligned buffer before bus deinit */
-		g_h.funcs->_h_sdio_card_deinit(bus_handle);
-		g_h.funcs->_h_bus_deinit(bus_handle);
+		h_transport_deinit(bus_handle);
 	}
 	sdio_handle = NULL;
 }
@@ -401,19 +400,19 @@ static int sdio_generate_slave_intr(uint8_t intr_no)
 		return ESP_ERR_INVALID_ARG;
 	}
 
-	return g_h.funcs->_h_sdio_write_reg(sdio_handle, HOST_TO_SLAVE_INTR, &intr_mask,
+	return h_sdio_write_reg(sdio_handle, HOST_TO_SLAVE_INTR, &intr_mask,
 		sizeof(intr_mask), ACQUIRE_LOCK);
 }
 
 static inline int sdio_get_intr(uint32_t *interrupts)
 {
-	return g_h.funcs->_h_sdio_read_reg(sdio_handle, ESP_SLAVE_INT_RAW_REG, (uint8_t *)interrupts,
+	return h_sdio_read_reg(sdio_handle, ESP_SLAVE_INT_RAW_REG, (uint8_t *)interrupts,
 		sizeof(uint32_t), ACQUIRE_LOCK);
 }
 
 static inline int sdio_clear_intr(uint32_t interrupts)
 {
-	return g_h.funcs->_h_sdio_write_reg(sdio_handle, ESP_SLAVE_INT_CLR_REG, (uint8_t *)&interrupts,
+	return h_sdio_write_reg(sdio_handle, ESP_SLAVE_INT_CLR_REG, (uint8_t *)&interrupts,
 		sizeof(uint32_t), ACQUIRE_LOCK);
 }
 
@@ -422,7 +421,7 @@ static int sdio_get_tx_buffer_num(uint32_t *tx_num, bool is_lock_needed)
 	uint32_t len = 0;
 	int ret = 0;
 
-	ret = g_h.funcs->_h_sdio_read_reg(sdio_handle, ESP_SLAVE_TOKEN_RDATA, (uint8_t *)&len,
+	ret = h_sdio_read_reg(sdio_handle, ESP_SLAVE_TOKEN_RDATA, (uint8_t *)&len,
 		sizeof(len), is_lock_needed);
 
 	if (ret) {
@@ -441,7 +440,7 @@ static int sdio_get_tx_buffer_num(uint32_t *tx_num, bool is_lock_needed)
 #if DO_COMBINED_REG_READ
 static int sdio_read_regs(uint8_t * buf)
 {
-	return g_h.funcs->_h_sdio_read_reg(sdio_handle, ESP_SLAVE_INT_RAW_REG, buf, REG_BUF_LEN, ACQUIRE_LOCK);
+	return h_sdio_read_reg(sdio_handle, ESP_SLAVE_INT_RAW_REG, buf, REG_BUF_LEN, ACQUIRE_LOCK);
 }
 #endif
 
@@ -492,7 +491,7 @@ static int sdio_get_len_from_slave(uint32_t *rx_size, bool is_lock_needed)
 		return ESP_FAIL;
 	*rx_size = 0;
 
-	ret = g_h.funcs->_h_sdio_read_reg(sdio_handle, ESP_SLAVE_PACKET_LEN_REG,
+	ret = h_sdio_read_reg(sdio_handle, ESP_SLAVE_PACKET_LEN_REG,
 		(uint8_t *)&len, sizeof(len), is_lock_needed);
 
 	if (ret) {
@@ -546,11 +545,11 @@ static int sdio_is_write_buffer_available(uint32_t buf_needed)
 
 				if (!max_retry_sdio_not_responding) {
 					ESP_LOGE(TAG, "%s: SDIO slave unresponsive", __func__);
-					g_h.funcs->_h_event_post(ESP_HOSTED_EVENT,
+					h_event_post(ESP_HOSTED_EVENT,
 							ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-							NULL, 0, HOSTED_BLOCK_MAX);
+							NULL, 0, H_BLOCK_MAX);
 #if H_TRANSPORT_RESTART_ON_FAILURE
-					g_h.funcs->_h_restart_host();
+					h_restart_host();
 #endif
 					return BUFFER_UNAVAILABLE;
 				}
@@ -562,7 +561,7 @@ static int sdio_is_write_buffer_available(uint32_t buf_needed)
 				ESP_LOGV(TAG, "Retry get write buffers %d", retry);
 				retry--;
 
-				g_h.funcs->_h_usleep(interval_us);
+				h_usleep(interval_us);
 				if (interval_us < MAX_BUFF_FETCH_PERIODICITY) {
 					interval_us += 400;
 				}
@@ -602,16 +601,16 @@ static void sdio_write_task(void const* pvParameters)
 	uint8_t flag = 0;
 
 	while (!sdio_start_write_thread)
-		g_h.funcs->_h_msleep(10);
+		h_msleep(10);
 
 	for (;;) {
 		/* Check if higher layers have anything to transmit */
-		g_h.funcs->_h_get_semaphore(sem_to_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_to_slave_queue, H_BLOCK_MAX);
 
 		/* Tx msg is present as per sem */
-		if (g_h.funcs->_h_dequeue_item(to_slave_queue[PRIO_Q_SERIAL], &buf_handle, 0))
-			if (g_h.funcs->_h_dequeue_item(to_slave_queue[PRIO_Q_BT], &buf_handle, 0))
-				if (g_h.funcs->_h_dequeue_item(to_slave_queue[PRIO_Q_OTHERS], &buf_handle, 0)) {
+		if (h_queue_recv(to_slave_queue[PRIO_Q_SERIAL], &buf_handle, 0))
+			if (h_queue_recv(to_slave_queue[PRIO_Q_BT], &buf_handle, 0))
+				if (h_queue_recv(to_slave_queue[PRIO_Q_OTHERS], &buf_handle, 0)) {
 					tx_needed = 0; /* No Tx msg */
 				}
 
@@ -684,11 +683,11 @@ static void sdio_write_task(void const* pvParameters)
 				// adjust actual payload len
 				len -= 1;
 				payload_header->len = htole16(len);
-				g_h.funcs->_h_memcpy(payload, &buf_handle.payload[1], len);
+				h_memcpy(payload, &buf_handle.payload[1], len);
 			}
 		} else
 		if (!buf_handle.payload_zcopy)
-			g_h.funcs->_h_memcpy(payload, buf_handle.payload, len);
+			h_memcpy(payload, buf_handle.payload, len);
 
 #if H_SDIO_CHECKSUM
 		payload_header->checksum = htole16(compute_checksum(sendbuf,
@@ -728,10 +727,10 @@ static void sdio_write_task(void const* pvParameters)
 			 */
 			uint32_t block_send_len = ((len_to_send + ESP_BLOCK_SIZE - 1) / ESP_BLOCK_SIZE) * ESP_BLOCK_SIZE;
 
-			ret = g_h.funcs->_h_sdio_write_block(sdio_handle, ESP_SLAVE_CMD53_END_ADDR - data_left,
+			ret = h_sdio_write_block(sdio_handle, ESP_SLAVE_CMD53_END_ADDR - data_left,
 				pos, block_send_len, ACQUIRE_LOCK);
 #else
-			ret = g_h.funcs->_h_sdio_write_block(sdio_handle, ESP_SLAVE_CMD53_END_ADDR - data_left,
+			ret = h_sdio_write_block(sdio_handle, ESP_SLAVE_CMD53_END_ADDR - data_left,
 				pos, len_to_send, ACQUIRE_LOCK);
 #endif
 			if (ret) {
@@ -744,11 +743,11 @@ static void sdio_write_task(void const* pvParameters)
 				} else {
 					SDIO_DRV_UNLOCK();
 					ESP_LOGE(TAG, "Unrecoverable host sdio state");
-					g_h.funcs->_h_event_post(ESP_HOSTED_EVENT,
+					h_event_post(ESP_HOSTED_EVENT,
 							ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-							NULL, 0, HOSTED_BLOCK_MAX);
+							NULL, 0, H_BLOCK_MAX);
 #if H_TRANSPORT_RESTART_ON_FAILURE
-					g_h.funcs->_h_restart_host();
+					h_restart_host();
 #endif
 					goto done;
 				}
@@ -874,8 +873,8 @@ static esp_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t
 		return ESP_FAIL;
 	}
 
-	g_h.funcs->_h_queue_item(from_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
-	g_h.funcs->_h_post_semaphore(sem_from_slave_queue);
+	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
+	h_sem_give(sem_from_slave_queue);
 
 	return ESP_OK;
 }
@@ -919,7 +918,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		 * wrong header/bit packing?
 		 * */
 		ESP_LOGW(TAG, "Dropping packet");
-		HOSTED_FREE(buf);
+		h_free(buf); buf = NULL;
 		return ESP_FAIL;
 	}
 
@@ -947,9 +946,9 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 	if (len > double_buf.buffer[index].buf_size) {
 		if (*buf) {
 			// free already allocated memory
-			g_h.funcs->_h_free_align(*buf);
+			h_free_align(*buf);
 		}
-		*buf = (uint8_t *)g_h.funcs->_h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
+		*buf = (uint8_t *)h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
 		assert(*buf);
 		double_buf.buffer[index].buf_size = len;
 		ESP_LOGD(TAG, "buf %d size: %ld", index, double_buf.buffer[index].buf_size);
@@ -1033,7 +1032,7 @@ static void sdio_data_to_rx_buf_task(void const* pvParameters)
 	ESP_LOGI(TAG, "sdio_data_to_rx_buf_task started");
 
 	while (1) {
-		g_h.funcs->_h_get_semaphore(sem_double_buf_xfer_data, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_double_buf_xfer_data, H_BLOCK_MAX);
 
 		if (double_buf.read_index < 0) {
 			ESP_LOGE(TAG, "invalid double buf read_index");
@@ -1113,7 +1112,7 @@ static void sdio_read_task(void const* pvParameters)
 
 	// wait for transport to be in reset state
 	while (true) {
-		g_h.funcs->_h_msleep(100);
+		h_msleep(100);
 		if (is_transport_rx_ready()) {
 			break;
 		}
@@ -1125,7 +1124,7 @@ static void sdio_read_task(void const* pvParameters)
 
 #if DO_COMBINED_REG_READ
     if (!reg_buf) {
-	    reg_buf = g_h.funcs->_h_malloc_align(REG_BUF_LEN, HOSTED_MEM_ALIGNMENT_64);
+	    reg_buf = h_malloc_align(REG_BUF_LEN, HOSTED_MEM_ALIGNMENT_64);
 	    assert(reg_buf);
     }
 #endif
@@ -1147,7 +1146,7 @@ static void sdio_read_task(void const* pvParameters)
 		// wait for sdio interrupt from slave
 		/* call will block until there is an interrupt, timeout or error */
 		ESP_LOGD(TAG, "--- Wait for SDIO intr ---");
-		res = g_h.funcs->_h_sdio_wait_slave_intr(sdio_handle, HOSTED_BLOCK_MAX);
+		res = h_sdio_wait_intr(sdio_handle, H_BLOCK_MAX);
 		ESP_LOGD(TAG, "--- SDIO intr received ---");
 
 		if (res != ESP_OK) {
@@ -1162,12 +1161,12 @@ static void sdio_read_task(void const* pvParameters)
 			ESP_LOGE(TAG, "failed to read registers");
 
 			SDIO_DRV_UNLOCK();
-			g_h.funcs->_h_event_post(ESP_HOSTED_EVENT,
+			h_event_post(ESP_HOSTED_EVENT,
 					ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-					NULL, 0, HOSTED_BLOCK_MAX);
+					NULL, 0, H_BLOCK_MAX);
 #if H_TRANSPORT_RESTART_ON_FAILURE
 			ESP_LOGI(TAG, "Host is resetting itself, to avoid any sdio race condition");
-			g_h.funcs->_h_restart_host();
+			h_restart_host();
 #endif
 			continue;
 		}
@@ -1180,12 +1179,12 @@ static void sdio_read_task(void const* pvParameters)
 			ESP_LOGE(TAG, "failed to read interrupt register");
 
 			SDIO_DRV_UNLOCK();
-			g_h.funcs->_h_event_post(ESP_HOSTED_EVENT,
+			h_event_post(ESP_HOSTED_EVENT,
 					ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-					NULL, 0, HOSTED_BLOCK_MAX);
+					NULL, 0, H_BLOCK_MAX);
 #if H_TRANSPORT_RESTART_ON_FAILURE
 			ESP_LOGI(TAG, "Host is resetting itself, to avoid any sdio race condition");
-			g_h.funcs->_h_restart_host();
+			h_restart_host();
 #endif
 			continue;
 		}
@@ -1249,11 +1248,11 @@ static void sdio_read_task(void const* pvParameters)
 			 * will ignore.
 			 */
 			uint32_t block_read_len = ((len_to_read + ESP_BLOCK_SIZE - 1) / ESP_BLOCK_SIZE) * ESP_BLOCK_SIZE;
-			ret = g_h.funcs->_h_sdio_read_block(sdio_handle,
+			ret = h_sdio_read_block(sdio_handle,
 					ESP_SLAVE_CMD53_END_ADDR - data_left,
 					pos, block_read_len, ACQUIRE_LOCK);
 #else
-			ret = g_h.funcs->_h_sdio_read_block(sdio_handle,
+			ret = h_sdio_read_block(sdio_handle,
 					ESP_SLAVE_CMD53_END_ADDR - data_left,
 					pos, len_to_read, ACQUIRE_LOCK);
 #endif
@@ -1282,7 +1281,7 @@ static void sdio_read_task(void const* pvParameters)
 			double_buf.read_data_len = len_from_slave;
 			double_buf.write_index = (double_buf.write_index) ? 0 : 1;
 			// trigger task to copy data to queue
-			g_h.funcs->_h_post_semaphore(sem_double_buf_xfer_data);
+			h_sem_give(sem_double_buf_xfer_data);
 		} else {
 			// error: task to copy data to queue still running
 			sdio_rx_free_buffer(rxbuff);
@@ -1309,11 +1308,11 @@ static void sdio_process_rx_task(void const* pvParameters)
 	ESP_LOGI(TAG, "Starting SDIO process rx task");
 
 	while (1) {
-		g_h.funcs->_h_get_semaphore(sem_from_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_from_slave_queue, H_BLOCK_MAX);
 
-		if (g_h.funcs->_h_dequeue_item(from_slave_queue[PRIO_Q_SERIAL], &buf_handle_l, 0))
-			if (g_h.funcs->_h_dequeue_item(from_slave_queue[PRIO_Q_BT], &buf_handle_l, 0))
-				if (g_h.funcs->_h_dequeue_item(from_slave_queue[PRIO_Q_OTHERS], &buf_handle_l, 0)) {
+		if (h_queue_recv(from_slave_queue[PRIO_Q_SERIAL], &buf_handle_l, 0))
+			if (h_queue_recv(from_slave_queue[PRIO_Q_BT], &buf_handle_l, 0))
+				if (h_queue_recv(from_slave_queue[PRIO_Q_OTHERS], &buf_handle_l, 0)) {
 					ESP_LOGI(TAG, "No element in any queue found");
 					continue;
 				}
@@ -1332,7 +1331,7 @@ static void sdio_process_rx_task(void const* pvParameters)
 #if 1
 			if (chan_arr[buf_handle->if_type] && chan_arr[buf_handle->if_type]->rx) {
 				/* TODO : Need to abstract heap_caps_malloc */
-				uint8_t * copy_payload = (uint8_t *)g_h.funcs->_h_malloc(buf_handle->payload_len);
+				uint8_t * copy_payload = (uint8_t *)h_malloc(buf_handle->payload_len);
 				assert(copy_payload);
 				assert(buf_handle->payload_len);
 				assert(buf_handle->payload);
@@ -1348,11 +1347,11 @@ static void sdio_process_rx_task(void const* pvParameters)
 				// only free memory when using older versions of wifi-remote
 #ifndef ESP_WIFI_REMOTE_VERSION // not defined in older versions of wifi-remote
 				if (unlikely(ret))
-					HOSTED_FREE(copy_payload);
+					h_free(copy_payload); copy_payload = NULL;
 #else
 #if ESP_WIFI_REMOTE_VERSION < ESP_WIFI_REMOTE_VERSION_VAL(1,3,1)
 				if (unlikely(ret))
-					HOSTED_FREE(copy_payload);
+					h_free(copy_payload); copy_payload = NULL;
 #else
 				(void)ret; // to silence 'unused variable' warning
 #endif
@@ -1434,39 +1433,43 @@ void *bus_init_internal(void)
 	/* register callback */
 
 #if defined(USE_DRIVER_LOCK)
-	sdio_bus_lock = g_h.funcs->_h_create_mutex();
-	assert(sdio_bus_lock);
+	if (h_mutex_create(&sdio_bus_lock) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create SDIO bus lock");
+		goto init_cleanup;
+	}
 #endif
 
-	sem_to_slave_queue = g_h.funcs->_h_create_semaphore(tx_queue_size * MAX_PRIORITY_QUEUES);
-	assert(sem_to_slave_queue);
-	g_h.funcs->_h_get_semaphore(sem_to_slave_queue, 0);
+	if (h_sem_create(tx_queue_size * MAX_PRIORITY_QUEUES, 0, &sem_to_slave_queue) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sem_to_slave_queue");
+		goto init_cleanup;
+	}
 
-	sem_from_slave_queue = g_h.funcs->_h_create_semaphore(rx_queue_size * MAX_PRIORITY_QUEUES);
-	assert(sem_from_slave_queue);
-	g_h.funcs->_h_get_semaphore(sem_from_slave_queue, 0);
-
-	/* cleanup the semaphores */
-
+	if (h_sem_create(rx_queue_size * MAX_PRIORITY_QUEUES, 0, &sem_from_slave_queue) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sem_from_slave_queue");
+		goto init_cleanup;
+	}
 
 	for (prio_q_idx=0; prio_q_idx<MAX_PRIORITY_QUEUES;prio_q_idx++) {
 		/* Queue - rx */
-		from_slave_queue[prio_q_idx] = g_h.funcs->_h_create_queue(rx_queue_size, sizeof(interface_buffer_handle_t));
-		assert(from_slave_queue[prio_q_idx]);
+		if (h_queue_create(rx_queue_size, sizeof(interface_buffer_handle_t), &from_slave_queue[prio_q_idx]) != H_OK) {
+			ESP_LOGE(TAG, "Failed to create rx queue[%u]", prio_q_idx);
+			goto init_cleanup;
+		}
 
 		/* Queue - tx */
-		to_slave_queue[prio_q_idx] = g_h.funcs->_h_create_queue(tx_queue_size, sizeof(interface_buffer_handle_t));
-		assert(to_slave_queue[prio_q_idx]);
+		if (h_queue_create(tx_queue_size, sizeof(interface_buffer_handle_t), &to_slave_queue[prio_q_idx]) != H_OK) {
+			ESP_LOGE(TAG, "Failed to create tx queue[%u]", prio_q_idx);
+			goto init_cleanup;
+		}
 	}
 
 	sdio_mempool_create(tx_queue_size, rx_queue_size);
 
 	/* initialise SDMMC before starting read/write threads
 	 * which depend on SDMMC*/
-	sdio_handle = g_h.funcs->_h_bus_init();
-	if (!sdio_handle) {
+	if (h_transport_init(&sdio_handle) != H_OK || !sdio_handle) {
 		ESP_LOGE(TAG, "could not create sdio handle, exiting\n");
-		assert(sdio_handle);
+		goto init_cleanup;
 	}
 
 	// initialise double buffering structs
@@ -1474,24 +1477,44 @@ void *bus_init_internal(void)
 	double_buf.read_index = -1; // indicates we are not reading anything
 	double_buf.write_index = 0; // we will write into the first buffer
 
-	sem_double_buf_xfer_data = g_h.funcs->_h_create_semaphore(1);
-	assert(sem_double_buf_xfer_data);
-	g_h.funcs->_h_get_semaphore(sem_double_buf_xfer_data, 0);
+	if (h_sem_create(1, 0, &sem_double_buf_xfer_data) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sem_double_buf_xfer_data");
+		goto init_cleanup;
+	}
 
-	sdio_rx_buf_thread = g_h.funcs->_h_thread_create("sdio_rx_buf",
-		DFLT_TASK_PRIO, RX_BUF_TASK_STACK_SIZE, sdio_data_to_rx_buf_task, NULL);
+	if (h_thread_create("sdio_rx_buf",
+		DFLT_TASK_PRIO, RX_BUF_TASK_STACK_SIZE, sdio_data_to_rx_buf_task, NULL,
+		&sdio_rx_buf_thread) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sdio_rx_buf thread");
+		goto init_cleanup;
+	}
 
-	sdio_read_thread = g_h.funcs->_h_thread_create("sdio_read",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_read_task, NULL);
+	if (h_thread_create("sdio_read",
+		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_read_task, NULL,
+		&sdio_read_thread) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sdio_read thread");
+		goto init_cleanup;
+	}
 
-	sdio_process_rx_thread = g_h.funcs->_h_thread_create("sdio_process_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_process_rx_task, NULL);
+	if (h_thread_create("sdio_process_rx",
+		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_process_rx_task, NULL,
+		&sdio_process_rx_thread) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sdio_process_rx thread");
+		goto init_cleanup;
+	}
 
-	sdio_write_thread = g_h.funcs->_h_thread_create("sdio_write",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_write_task, NULL);
+	if (h_thread_create("sdio_write",
+		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_write_task, NULL,
+		&sdio_write_thread) != H_OK) {
+		ESP_LOGE(TAG, "Failed to create sdio_write thread");
+		goto init_cleanup;
+	}
 
 	ESP_LOGD(TAG, "sdio bus init done");
 	return sdio_handle;
+init_cleanup:
+	bus_deinit_internal(sdio_handle);
+	return NULL;
 }
 
 /**
@@ -1543,8 +1566,8 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		pkt_stats.sta_tx_in_pass++;
 #endif
 
-	g_h.funcs->_h_queue_item(to_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
-	g_h.funcs->_h_post_semaphore(sem_to_slave_queue);
+	h_queue_send(to_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
+	h_sem_give(sem_to_slave_queue);
 
 
 	return ESP_OK;
@@ -1574,8 +1597,8 @@ static esp_err_t transport_card_init(void *bus_handle, uint32_t timeout_ms)
 
 	// call card init, even if timeout_ms is 0
 	do {
-		res = g_h.funcs->_h_sdio_card_init(bus_handle, (i == 0) ? true : false);
-		g_h.funcs->_h_msleep(100);
+		res = h_sdio_card_init(bus_handle, (i == 0) ? true : false);
+		h_msleep(100);
 		if (res == ESP_OK) {
 			break;
 		}
@@ -1587,13 +1610,13 @@ static esp_err_t transport_card_init(void *bus_handle, uint32_t timeout_ms)
 
 static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 {
-	g_h.funcs->_h_config_gpio(reset_pin.port, reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
-	g_h.funcs->_h_write_gpio(reset_pin.port, reset_pin.pin, H_RESET_VAL_ACTIVE);
-	g_h.funcs->_h_msleep(10);
-	g_h.funcs->_h_write_gpio(reset_pin.port, reset_pin.pin, H_RESET_VAL_INACTIVE);
-	g_h.funcs->_h_msleep(10);
-	g_h.funcs->_h_write_gpio(reset_pin.port, reset_pin.pin, H_RESET_VAL_ACTIVE);
-	g_h.funcs->_h_msleep(H_HOST_SDIO_RESET_DELAY_MS);
+	h_gpio_config(reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
+	h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
+	h_msleep(10);
+	h_gpio_write(reset_pin.pin, H_RESET_VAL_INACTIVE);
+	h_msleep(10);
+	h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
+	h_msleep(H_HOST_SDIO_RESET_DELAY_MS);
 	return ESP_OK;
 }
 
@@ -1645,13 +1668,13 @@ int ensure_slave_bus_ready(void *bus_handle)
 		ESP_LOGI(TAG, "Host woke up from power save");
 
 		/* Reset double buffer state after wakeup to prevent race conditions */
-		g_h.funcs->_h_msleep(500);
+		h_msleep(500);
 		/* Reset double buffer state - this ensures clean state after wakeup */
 		double_buf.read_index = -1;
 		double_buf.write_index = 0;
 		double_buf.read_data_len = 0;
 		if (sem_double_buf_xfer_data) {
-			while (g_h.funcs->_h_get_semaphore(sem_double_buf_xfer_data, 0) == ESP_OK);
+			while (h_sem_take(sem_double_buf_xfer_data, 0) == H_OK);
 		}
 
 		res = transport_card_init(bus_handle, CARD_INIT_TIMEOUT_MS);

@@ -9,10 +9,11 @@
 #include "serial_if.h"
 #include "serial_ll_if.h"
 #include "h_wrapper.h"
+#include "h_control_serial_adapter.h"
 
 DEFINE_LOG_TAG(serial);
 
-struct serial_drv_handle_t {
+struct h_control_serial_handle {
 	int handle; /* dummy variable */
 };
 
@@ -23,9 +24,9 @@ static void * readSemaphore;
 static void rpc_rx_indication(void);
 
 /* Global serial handle - shared by RPC RX and TX threads */
-static struct serial_drv_handle_t* g_serial_drv_handle = NULL;
+static struct h_control_serial_handle* g_serial_drv_handle = NULL;
 
-static int serial_drv_write_fail(uint8_t *buf, int *out_count, int ret)
+static int h_control_serial_drv_write_fail(uint8_t *buf, int *out_count, int ret)
 {
 	if (out_count) {
 		*out_count = 0;
@@ -37,7 +38,7 @@ static int serial_drv_write_fail(uint8_t *buf, int *out_count, int ret)
 }
 
 /* -------- Serial Drv ---------- */
-struct serial_drv_handle_t* serial_drv_open(const char *transport)
+struct h_control_serial_handle* h_control_serial_drv_open(const char *transport)
 {
 	if (!transport) {
 		H_LOGE(TAG, "Invalid parameter in open");
@@ -51,8 +52,8 @@ struct serial_drv_handle_t* serial_drv_open(const char *transport)
 	}
 
 	/* Allocate new handle */
-	g_serial_drv_handle = (struct serial_drv_handle_t*) h_calloc
-		(1,sizeof(struct serial_drv_handle_t));
+	g_serial_drv_handle = (struct h_control_serial_handle*) h_calloc
+		(1,sizeof(struct h_control_serial_handle));
 	if (!g_serial_drv_handle) {
 		H_LOGE(TAG, "Failed to allocate memory \n");
 		return NULL;
@@ -62,7 +63,7 @@ struct serial_drv_handle_t* serial_drv_open(const char *transport)
 	return g_serial_drv_handle;
 }
 
-int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
+int h_control_serial_drv_write (struct h_control_serial_handle* serial_drv_handle,
 	uint8_t* buf, int in_count, int* out_count)
 {
 	int ret = 0;
@@ -78,7 +79,7 @@ int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
 		(!serial_ll_if_g->fops) ||
 		(!serial_ll_if_g->fops->write)) {
 		H_LOGE(TAG,"serial interface not valid\n\r");
-		return serial_drv_write_fail(buf, out_count, H_ERR_INVALID_ARG);
+		return h_control_serial_drv_write_fail(buf, out_count, H_ERR_INVALID_ARG);
 	}
 
 	H_LOGV(TAG, "serial_write buf=%p len=%u", buf, in_count);
@@ -94,7 +95,7 @@ int serial_drv_write (struct serial_drv_handle_t* serial_drv_handle,
 }
 
 
-uint8_t * serial_drv_read(struct serial_drv_handle_t *serial_drv_handle,
+uint8_t * h_control_serial_drv_read(struct h_control_serial_handle *serial_drv_handle,
 		uint32_t *out_nbyte)
 {
 	uint16_t init_read_len = 0;
@@ -221,7 +222,7 @@ free_bufs:
 	return NULL;
 }
 
-int serial_drv_close(struct serial_drv_handle_t** serial_drv_handle)
+int h_control_serial_drv_close(struct h_control_serial_handle** serial_drv_handle)
 {
 	if (!serial_drv_handle || !(*serial_drv_handle)) {
 		H_LOGE(TAG,"Invalid parameter in close \n\r");
@@ -236,12 +237,14 @@ int serial_drv_close(struct serial_drv_handle_t** serial_drv_handle)
 	return H_OK;
 }
 
-int rpc_platform_init(void)
+int h_control_serial_platform_init(void)
 {
 	/* rpc semaphore */
-	h_err_t ret = h_sem_create(H_MAX_SYNC_RPC_REQUESTS +
-			H_MAX_ASYNC_RPC_REQUESTS, 1, &readSemaphore);
-	assert(readSemaphore && ret == H_OK);
+	if (h_sem_create(H_MAX_SYNC_RPC_REQUESTS +
+			H_MAX_ASYNC_RPC_REQUESTS, 1, &readSemaphore) != H_OK) {
+		H_LOGE(TAG,"Failed to create RPC semaphore\n\r");
+		return H_FAIL;
+	}
 
 	/* grab the semaphore, so that task will be mandated to wait on semaphore */
 	h_sem_take(readSemaphore, 0);
@@ -249,18 +252,23 @@ int rpc_platform_init(void)
 	serial_ll_if_g = serial_ll_init(rpc_rx_indication);
 	if (!serial_ll_if_g) {
 		H_LOGE(TAG,"Serial interface creation failed\n\r");
-		assert(serial_ll_if_g);
+		h_sem_delete(readSemaphore);
+		readSemaphore = NULL;
 		return H_FAIL;
 	}
 	if (H_OK != serial_ll_if_g->fops->open(serial_ll_if_g)) {
 		H_LOGE(TAG,"Serial interface open failed\n\r");
+		serial_ll_if_g->fops->close(serial_ll_if_g);
+		serial_ll_if_g = NULL;
+		h_sem_delete(readSemaphore);
+		readSemaphore = NULL;
 		return H_FAIL;
 	}
 	return H_OK;
 }
 
 /* TODO: Why this is not called in transport_pserial_close() */
-int rpc_platform_deinit(void)
+int h_control_serial_platform_deinit(void)
 {
 	if (serial_ll_if_g) {
 		if (H_OK != serial_ll_if_g->fops->close(serial_ll_if_g)) {

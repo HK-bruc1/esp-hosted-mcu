@@ -1,10 +1,10 @@
 /* tests/test_rpc_bridge.c — Minimal contract tests for RPC bridge files
- * (h_rpc_req.c, h_rpc_rsp.c, h_rpc_evt.c, h_rpc_slave_if.c, h_rpc_utils.c)
+ * (h_rpc_req.c, h_rpc_rsp.c, h_rpc_evt.c, h_control_serial_adapter.c, h_rpc_utils.c)
  */
 #include "unity.h"
 #include "h_types.h"
 #include "rpc_core.h"
-#include "serial_drv.h"
+#include "h_control_serial_adapter.h"
 #include "esp_hosted_rpc.pb-c.h"
 #include "esp_wifi.h"  /* mock stub: wifi_sta_config_t */
 #include <string.h>
@@ -79,36 +79,36 @@ void test_compose_rpc_req_null(void)
     (void)failure_status;
 }
 
-/* ── h_rpc_slave_if.c: serial driver ── */
+/* ── h_control_serial_adapter.c: serial driver ── */
 void test_serial_drv_open_close(void)
 {
-    struct serial_drv_handle_t *h = serial_drv_open("spi");
+    h_control_serial_handle_t *h = h_control_serial_drv_open("spi");
     TEST_ASSERT_NOT_NULL(h);
 
-    int ret = serial_drv_close(&h);
+    int ret = h_control_serial_drv_close(&h);
     TEST_ASSERT_EQUAL(H_OK, ret);
     TEST_ASSERT_NULL(h);
 }
 
 void test_serial_drv_null_args(void)
 {
-    TEST_ASSERT_NULL(serial_drv_open(NULL));
+    TEST_ASSERT_NULL(h_control_serial_drv_open(NULL));
 
     uint8_t buf[4] = {0};
     int out_count = 0;
     TEST_ASSERT_EQUAL(H_ERR_INVALID_ARG,
-        serial_drv_write(NULL, buf, sizeof(buf), &out_count));
+        h_control_serial_drv_write(NULL, buf, sizeof(buf), &out_count));
 
     uint32_t nbyte = 0;
-    TEST_ASSERT_NULL(serial_drv_read(NULL, &nbyte));
+    TEST_ASSERT_NULL(h_control_serial_drv_read(NULL, &nbyte));
 
-    TEST_ASSERT_EQUAL(H_ERR_INVALID_ARG, serial_drv_close(NULL));
+    TEST_ASSERT_EQUAL(H_ERR_INVALID_ARG, h_control_serial_drv_close(NULL));
 }
 
 void test_rpc_platform_deinit_safe(void)
 {
     /* Deinit without prior init should be safe (no crash) */
-    int ret = rpc_platform_deinit();
+    int ret = h_control_serial_platform_deinit();
     TEST_ASSERT_EQUAL(H_OK, ret);
 }
 

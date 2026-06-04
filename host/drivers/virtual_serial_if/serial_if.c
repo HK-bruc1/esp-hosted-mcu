@@ -7,8 +7,12 @@
 /** Includes **/
 #include <string.h>
 #include "serial_if.h"
-#include "serial_drv.h"
+#include "h_wrapper.h"
 #include "port_esp_hosted_host_log.h"
+
+/* Control serial adapter (Path B — port adapter, not a contract)
+ * Defined in host/port/esp-idf/h_control_serial_adapter.c */
+#include "h_control_serial_adapter.h"
 
 DEFINE_LOG_TAG(serial_if);
 
@@ -22,7 +26,7 @@ DEFINE_LOG_TAG(serial_if);
 
 
 /** Exported variables **/
-struct serial_drv_handle_t* serial_handle = NULL;
+h_control_serial_handle_t* serial_handle = NULL;
 
 /*
  * The data written on serial driver file, `SERIAL_IF_FILE` from esp_hosted_transport.h
@@ -59,7 +63,7 @@ uint16_t compose_tlv(uint8_t* buf, uint8_t* data, uint16_t data_length)
 	count++;
 	buf[count] = ((data_length >> 8) & 0xFF);
 	count++;
-	g_h.funcs->_h_memcpy(&buf[count], data, data_length);
+	h_memcpy(&buf[count], data, data_length);
 	count = count + data_length;
 	return count;
 }
@@ -115,12 +119,12 @@ int transport_pserial_close(void)
 {
 	int ret = SUCCESS;
 
-	ret = rpc_platform_deinit();
+	ret = h_control_serial_platform_deinit();
 	if (ret != SUCCESS) {
 		ESP_LOGE(TAG, "Platform deinit failed\n");
 	}
 
-	ret = serial_drv_close(&serial_handle);
+	ret = h_control_serial_drv_close(&serial_handle);
 
 	if (ret) {
 		ESP_LOGE(TAG, "Failed to close driver interface\n");
@@ -140,13 +144,13 @@ int transport_pserial_open(void)
 		return ret;
 	}
 
-	serial_handle = serial_drv_open(transport);
+	serial_handle = h_control_serial_drv_open(transport);
 	if (!serial_handle) {
 		printf("serial interface open failed, Is the driver loaded?\n");
 		return FAILURE;
 	}
 
-	ret = rpc_platform_init();
+	ret = h_control_serial_platform_init();
 	if (ret != SUCCESS) {
 		printf("Platform init failed\n");
 		transport_pserial_close();
@@ -182,7 +186,11 @@ int transport_pserial_send(uint8_t* data, uint16_t data_length)
 	buf_len = SIZE_OF_TYPE + SIZE_OF_LENGTH + strlen(ep_name) +
 		SIZE_OF_TYPE + SIZE_OF_LENGTH + data_length;
 
-	HOSTED_CALLOC(uint8_t,write_buf,buf_len,free_bufs2);
+	write_buf = (uint8_t *)h_calloc(1, buf_len);
+	if (!write_buf) {
+		H_LOGE(TAG, "%s, Failed to allocate memory", __func__);
+		goto free_bufs2;
+	}
 
 	if (!serial_handle) {
 		ESP_LOGE(TAG, "Serial connection closed?\n");
@@ -195,7 +203,7 @@ int transport_pserial_send(uint8_t* data, uint16_t data_length)
 		goto free_bufs1;
 	}
 
-	ret = serial_drv_write(serial_handle, write_buf, count, &count);
+	ret = h_control_serial_drv_write(serial_handle, write_buf, count, &count);
 	if (ret != SUCCESS) {
 		ESP_LOGE(TAG, "Failed to write TX data\n");
 		goto free_bufs2;
@@ -204,14 +212,14 @@ int transport_pserial_send(uint8_t* data, uint16_t data_length)
 	return ret;
 
 free_bufs1:
-	HOSTED_FREE(write_buf);
+	h_free(write_buf); write_buf = NULL;
 free_bufs2:
-	/* write_buf is supposed to be freed by serial_drv_write() */
+	/* write_buf is supposed to be freed by h_control_serial_drv_write() */
 	return FAILURE;
 }
 
 uint8_t * transport_pserial_read(uint32_t *out_nbyte)
 {
-	/* Two step parsing TLV is moved in serial_drv_read */
-	return serial_drv_read(serial_handle, out_nbyte);
+	/* Two step parsing TLV is moved in h_control_serial_drv_read */
+	return h_control_serial_drv_read(serial_handle, out_nbyte);
 }

@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "rpc_wrap.h"
 #include "esp_hosted_os_abstraction.h"
+#include "h_wrapper.h"
 
 static const char* TAG = "esp_hosted_ota";
 
@@ -28,7 +29,7 @@ esp_err_t esp_hosted_slave_ota_write(uint8_t* ota_data, uint32_t ota_data_len)
 
     ESP_LOGV(TAG, "Writing %ld bytes of OTA data", ota_data_len);
     ret = rpc_ota_write(ota_data, ota_data_len);
-    g_h.funcs->_h_msleep(10);
+    h_msleep(10);
     return ret;
 }
 

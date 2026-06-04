@@ -49,7 +49,6 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		"${core_src_dir}/h_rpc_rsp.c"
 		"${core_src_dir}/h_rpc_evt.c"
 		"${core_src_dir}/h_rpc_utils.c"
-		"${core_src_dir}/h_rpc_slave_if.c"
 		"${core_src_dir}/h_rpc_wrap.c"
 		"${host_dir}/drivers/rpc/slaveif/rpc_slave_if.c")
 
@@ -114,7 +113,10 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		list(APPEND srcs "${host_dir}/drivers/transport/uart/uart_drv.c")
 	endif()
 
-	# port files (legacy — still needed by h_rpc_core.c g_h.funcs usage)
+	# Legacy port files — provide hosted_sdio_*/hosted_spi_*/etc. implementations
+	# called from the new h_transport_*.c adapters and from g_h.funcs vtable.
+	# These are active adapter files, marked for eventual retirement when
+	# the legacy implementations are consolidated into host/port/esp-idf/.
 	list(APPEND priv_include "${host_dir}/port/esp/freertos/include")
 
 	list(APPEND srcs
@@ -143,6 +145,7 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		"${host_dir}/port/esp-idf/h_osal.c"
 		"${host_dir}/port/esp-idf/h_event.c"
 		"${host_dir}/port/esp-idf/h_wifi_type_adapt.c"
+		"${host_dir}/port/esp-idf/h_control_serial_adapter.c"
 	)
 
 	if(CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE)

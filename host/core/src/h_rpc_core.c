@@ -13,7 +13,6 @@
 #include "rpc_core.h"
 #include "esp_hosted_rpc.h"
 #include "serial_if.h"
-#include "serial_drv.h"
 #include "h_serial_if.h"
 #include <unistd.h>
 // REMOVED: esp_task.h
@@ -468,7 +467,7 @@ static void rpc_rx_thread(void *arg)
 	rpc_rx_func = (rpc_rx_ind_t) arg;
 
 	/* If serial interface is not available, exit */
-	if (!serial_drv_open(SERIAL_IF_FILE)) {
+	if (!h_serial_if_is_ready()) {
 		H_LOGE(TAG, "Exiting thread, handle invalid");
 		return;
 	}
@@ -529,7 +528,7 @@ static void rpc_tx_thread(void *arg)
 
 	H_LOGD(TAG, "Starting tx thread");
 	/* If serial interface is not available, exit */
-	if (!serial_drv_open(SERIAL_IF_FILE)) {
+	if (!h_serial_if_is_ready()) {
 		H_LOGE(TAG, "Exiting thread, handle invalid");
 		return;
 	}
