@@ -7,8 +7,12 @@
 /** Includes **/
 #include "string.h"
 #include "serial_ll_if.h"
-#include "transport_drv.h"
+#include "h_transport_drv.h"  /* H_FREE_PTR_WITH_FUNC, H_BUFF_NO_ZEROCOPY */
+#include "h_port_config.h"     /* H_MAX_TRANSPORT_BUFFER_SIZE */
 #include "h_wrapper.h"
+
+/* MAX_PAYLOAD_SIZE = transport buffer minus hosted header */
+#define MAX_PAYLOAD_SIZE  (H_MAX_TRANSPORT_BUFFER_SIZE - H_ESP_PAYLOAD_HEADER_OFFSET)
 #include "esp_hosted_transport.h"
 #include "esp_hosted_header.h"
 #include "port_esp_hosted_host_log.h"
@@ -242,7 +246,7 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 			free_func = h_free_fn;
 		}
 
-		int ret = esp_hosted_tx(serial_ll_hdl->if_type,
+		int ret = h_transmit(serial_ll_hdl->if_type,
 					serial_ll_hdl->if_num,
 					frag_ptr,
 					frag_len,
@@ -253,7 +257,7 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 			if (flags & MORE_FRAGMENT) {
 				H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
 			}
-			H_LOGE(TAG, "esp_hosted_tx failed at offset=%u len=%u", offset, frag_len);
+			H_LOGE(TAG, "h_transmit failed at offset=%u len=%u", offset, frag_len);
 			return ret;
 		}
 

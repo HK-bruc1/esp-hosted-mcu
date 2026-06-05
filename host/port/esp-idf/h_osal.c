@@ -22,6 +22,8 @@
 #include <esp_log.h>
 #include <esp_system.h>   /* esp_restart(), esp_unregister_shutdown_handler */
 #include <esp_wifi.h>     /* esp_wifi_stop */
+#include <esp_sleep.h>    /* esp_sleep_get_wakeup_cause, esp_deep_sleep_* */
+#include "esp_hosted_power_save.h"
 #include <stdarg.h>
 
 /* Weak fallback for SPI-HD extension — overridden by real implementation
@@ -193,32 +195,82 @@ static void h_exit_critical_adapter(void)
     vPortExitCritical();
 }
 
-/* ──  Timers (Phase 1 stubs — full implementation in Phase 2) ── */
+/* ──  Timers (esp_timer adapter) ── */
 
-static int h_timer_create_stub(const char *name, h_timer_t *out)
+typedef struct {
+    esp_timer_handle_t handle;
+    bool started;
+} h_timer_adapter_t;
+
+static int h_timer_create_adapter(const char *name, h_timer_t *out)
 {
     (void)name;
-    *out = NULL;
-    return H_ERR_NOT_SUP;
+    h_timer_adapter_t *t = calloc(1, sizeof(h_timer_adapter_t));
+    if (!t) return H_ERR_NO_MEM;
+    *out = (h_timer_t)t;
+    return H_OK;
 }
 
-static int h_timer_start_stub(h_timer_t t, uint32_t period_ms,
-                              bool periodic, void (*cb)(void*), void *arg)
+static int h_timer_start_adapter(h_timer_t t, uint32_t period_ms,
+                                 bool periodic, void (*cb)(void*), void *arg)
 {
-    (void)t; (void)period_ms; (void)periodic; (void)cb; (void)arg;
-    return H_ERR_NOT_SUP;
+    if (!t || !cb) return H_ERR_INVALID_ARG;
+    h_timer_adapter_t *timer = (h_timer_adapter_t *)t;
+
+    if (timer->started && timer->handle) {
+        esp_timer_stop(timer->handle);
+        esp_timer_delete(timer->handle);
+        timer->handle = NULL;
+        timer->started = false;
+    }
+
+    esp_timer_create_args_t args = {
+        .callback = cb,
+        .arg = arg,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "h_timer",
+    };
+    if (esp_timer_create(&args, &timer->handle) != ESP_OK)
+        return H_FAIL;
+
+    esp_err_t err = periodic
+        ? esp_timer_start_periodic(timer->handle, period_ms * 1000ULL)
+        : esp_timer_start_once(timer->handle, period_ms * 1000ULL);
+    if (err != ESP_OK) {
+        esp_timer_delete(timer->handle);
+        timer->handle = NULL;
+        return H_FAIL;
+    }
+
+    timer->started = true;
+    return H_OK;
 }
 
-static int h_timer_stop_stub(h_timer_t t)
+static int h_timer_stop_adapter(h_timer_t t)
 {
-    (void)t;
-    return H_ERR_NOT_SUP;
+    if (!t) return H_ERR_INVALID_ARG;
+    h_timer_adapter_t *timer = (h_timer_adapter_t *)t;
+    if (!timer->started || !timer->handle) goto free_wrapper;
+    esp_timer_stop(timer->handle);
+    esp_timer_delete(timer->handle);
+    timer->handle = NULL;
+    timer->started = false;
+free_wrapper:
+    free(timer);
+    return H_OK;
 }
 
-static int h_timer_delete_stub(h_timer_t t)
+static int h_timer_delete_adapter(h_timer_t t)
 {
-    (void)t;
-    return H_ERR_NOT_SUP;
+    if (!t) return H_ERR_INVALID_ARG;
+    h_timer_adapter_t *timer = (h_timer_adapter_t *)t;
+    if (timer->handle) {
+        if (timer->started)
+            esp_timer_stop(timer->handle);
+        esp_timer_delete(timer->handle);
+    }
+    free(timer);
+    return H_OK;
 }
 
 /* ──  Time ── */
@@ -295,6 +347,50 @@ static int h_spi_hd_set_data_lines_adapter(uint32_t data_lines)
     return hosted_spi_hd_set_data_lines(data_lines);
 }
 
+/* ──  Power-Save Adapters ── */
+
+static int h_get_wakeup_reason_adapter(void)
+{
+#if H_HOST_PS_ALLOWED
+    esp_reset_reason_t reason = esp_reset_reason();
+    if (reason == ESP_RST_POWERON) {
+        return HOSTED_WAKEUP_NORMAL_REBOOT;
+    }
+    if (reason == ESP_RST_DEEPSLEEP) {
+        bool gpio_wakeup = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO);
+        if (gpio_wakeup)
+            return HOSTED_WAKEUP_DEEP_SLEEP;
+    }
+    return HOSTED_WAKEUP_UNDEFINED;
+#else
+    return HOSTED_WAKEUP_NORMAL_REBOOT;
+#endif
+}
+
+static int h_config_power_save_adapter(int type, int wakeup_pin, int wakeup_level)
+{
+#if H_HOST_PS_ALLOWED
+    if (type == HOSTED_POWER_SAVE_TYPE_DEEP_SLEEP) {
+        if (!esp_sleep_is_valid_wakeup_gpio(wakeup_pin))
+            return H_FAIL;
+        return (esp_deep_sleep_enable_gpio_wakeup(BIT(wakeup_pin), wakeup_level) == ESP_OK)
+            ? H_OK : H_FAIL;
+    }
+#endif
+    return H_FAIL;
+}
+
+static int h_start_power_save_adapter(int type)
+{
+#if H_HOST_PS_ALLOWED
+    if (type == HOSTED_POWER_SAVE_TYPE_DEEP_SLEEP) {
+        esp_deep_sleep_start();
+        return H_OK;
+    }
+#endif
+    return H_FAIL;
+}
+
 /* ──  Global OSAL Contract Instance ── */
 
 extern int esp_hosted_power_save_init(void);
@@ -340,11 +436,11 @@ const h_osal_contract_t g_h_osal = {
     .enter_critical    = h_enter_critical_adapter,
     .exit_critical     = h_exit_critical_adapter,
 
-    /* Timer (stubs for Phase 1) */
-    .timer_create      = h_timer_create_stub,
-    .timer_start       = h_timer_start_stub,
-    .timer_stop        = h_timer_stop_stub,
-    .timer_delete      = h_timer_delete_stub,
+    /* Timer (esp_timer adapter) */
+    .timer_create      = h_timer_create_adapter,
+    .timer_start       = h_timer_start_adapter,
+    .timer_stop        = h_timer_stop_adapter,
+    .timer_delete      = h_timer_delete_adapter,
     .get_time_ms       = h_get_time_ms_adapter,
 
     /* Time / Delay */
@@ -361,4 +457,9 @@ const h_osal_contract_t g_h_osal = {
     .woke_from_ps      = esp_hosted_woke_from_power_save,
     .ps_init           = esp_hosted_power_save_init,
     .spi_hd_set_data_lines = h_spi_hd_set_data_lines_adapter,
+
+    /* Power-save extensions */
+    .get_host_wakeup_or_reboot_reason = h_get_wakeup_reason_adapter,
+    .config_host_power_save_hal       = h_config_power_save_adapter,
+    .start_host_power_save_hal        = h_start_power_save_adapter,
 };

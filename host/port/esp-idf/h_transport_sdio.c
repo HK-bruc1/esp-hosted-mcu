@@ -142,6 +142,20 @@ static int h_gpio_write_adapter(uint32_t pin, uint32_t value)
     return H_OK;
 }
 
+static int h_gpio_pull_adapter(uint32_t pin, uint32_t pull_type, bool enable)
+{
+    if (pull_type == GPIO_PULLUP_ONLY) {
+        return enable ? gpio_pullup_en(pin) : gpio_pullup_dis(pin);
+    } else {
+        return enable ? gpio_pulldown_en(pin) : gpio_pulldown_dis(pin);
+    }
+}
+
+static int h_gpio_hold_adapter(uint32_t pin, bool enable)
+{
+    return enable ? gpio_hold_en(pin) : gpio_hold_dis(pin);
+}
+
 static int h_esp_hosted_tx_adapter(uint8_t iface_type, uint8_t iface_num,
                                    uint8_t *payload, uint16_t len,
                                    uint8_t zcopy, void *to_free,
@@ -181,6 +195,8 @@ const h_transport_contract_t g_h_transport = {
     .gpio_clear_intr = h_gpio_clear_intr_adapter,
     .gpio_read      = h_gpio_read_adapter,
     .gpio_write     = h_gpio_write_adapter,
+    .gpio_pull      = h_gpio_pull_adapter,
+    .gpio_hold      = h_gpio_hold_adapter,
 
     /* netif — NULL for Phase 1 */
     .netif_create   = NULL,

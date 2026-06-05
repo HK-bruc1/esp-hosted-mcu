@@ -150,6 +150,8 @@ typedef enum {
 #define h_gpio_clear_intr(pin)           (g_h_transport.gpio_clear_intr(pin))
 #define h_gpio_read(pin)                 (g_h_transport.gpio_read(pin))
 #define h_gpio_write(pin, val)           (g_h_transport.gpio_write(pin, val))
+#define h_gpio_pull(pin, pull, en)        H_VTABLE_CALL(&g_h_transport, gpio_pull, pin, pull, en)
+#define h_gpio_hold(pin, en)              H_VTABLE_CALL(&g_h_transport, gpio_hold, pin, en)
 
 #define h_netif_create(t, n)             (g_h_transport.netif_create(t, n))
 #define h_netif_destroy(t, n)            (g_h_transport.netif_destroy(t, n))
@@ -169,6 +171,15 @@ typedef enum {
 
 #define h_spi_hd_set_data_lines(n) \
     H_VTABLE_CALL(&g_h_osal, spi_hd_set_data_lines, n)
+
+#define h_get_host_wakeup_or_reboot_reason() \
+    H_VTABLE_CALL(&g_h_osal, get_host_wakeup_or_reboot_reason)
+
+#define h_config_host_power_save_hal(type, wp_pin, wp_level) \
+    H_VTABLE_CALL(&g_h_osal, config_host_power_save_hal, type, wp_pin, wp_level)
+
+#define h_start_host_power_save_hal(type) \
+    H_VTABLE_CALL(&g_h_osal, start_host_power_save_hal, type)
 
 /* ── Safe Callback (for optional vtable functions) ── */
 #define H_VTABLE_CALL(ops, func, ...) \

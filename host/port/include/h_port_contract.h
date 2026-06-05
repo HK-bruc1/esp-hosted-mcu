@@ -60,7 +60,12 @@ typedef struct {
     void (*enter_critical)(void);
     void (*exit_critical)(void);
 
-    /* Timer (required) */
+    /* Timer (required)
+     * Lifecycle: timer_create → timer_start → timer_stop (consumes handle)
+     * timer_stop() stops the timer AND frees the handle — it is a terminal
+     * operation. Callers must set their handle to NULL after stop.
+     * timer_delete() is a secondary cleanup path for handles that were
+     * created but never started, or for error paths after create. */
     int (*timer_create)(const char *name, h_timer_t *out);
     int (*timer_start)(h_timer_t t, uint32_t period_ms, bool periodic,
                        void (*cb)(void*), void *arg);
@@ -82,6 +87,11 @@ typedef struct {
     int  (*woke_from_ps)(void);
     int  (*ps_init)(void);
     int  (*spi_hd_set_data_lines)(uint32_t data_lines);
+
+    /* Power-save extensions (optional — port may leave NULL) */
+    int  (*get_host_wakeup_or_reboot_reason)(void);
+    int  (*config_host_power_save_hal)(int type, int wakeup_pin, int wakeup_level);
+    int  (*start_host_power_save_hal)(int type);
 } h_osal_contract_t;
 
 /* ── Event Contract ── */
@@ -156,6 +166,10 @@ typedef struct {
     int (*gpio_clear_intr)(uint32_t pin);
     int (*gpio_read)(uint32_t pin);
     int (*gpio_write)(uint32_t pin, uint32_t value);
+
+    /* GPIO power-save extensions (optional — port may leave NULL) */
+    int (*gpio_pull)(uint32_t pin, uint32_t pull_type, bool enable);
+    int (*gpio_hold)(uint32_t pin, bool enable);
 
     /* netif */
     int (*netif_create)(uint8_t if_type, uint8_t if_num);

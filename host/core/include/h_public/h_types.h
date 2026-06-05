@@ -28,6 +28,11 @@ typedef int h_err_t;
 #define H_ERR_INVALID_STATE -6
 #define H_ERR_BUSY         -7
 
+/* ── Memory Alignment ── */
+#define H_MEM_ALIGNMENT_4      4
+#define H_MEM_ALIGNMENT_32    32
+#define H_MEM_ALIGNMENT_64    64
+
 /* ── MAC Address ── */
 typedef uint8_t h_mac_addr_t[6];
 

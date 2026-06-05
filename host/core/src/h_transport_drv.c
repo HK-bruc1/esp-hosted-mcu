@@ -183,6 +183,8 @@ h_err_t transport_drv_reconfigure(void)
 		timer_ret = h_timer_start(init_timeout_timer, H_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE_TIMEOUT_MS, false, init_timeout_cb, NULL);
 		if (timer_ret != H_OK) {
 			H_LOGE(TAG, "Failed to start init timeout timer");
+			h_timer_delete(init_timeout_timer);
+			init_timeout_timer = NULL;
 			return H_FAIL;
 		}
 		H_LOGI(TAG, "Started host communication init timer of %u millisec", H_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE_TIMEOUT_MS);

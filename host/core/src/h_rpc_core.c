@@ -222,6 +222,7 @@ static int process_rpc_tx_msg(ctrl_cmd_t *app_req)
 				rpc_async_timeout_handler, app_req);
 		if (timer_ret != H_OK) {
 			H_LOGE(TAG, "Failed to start async resp timer");
+			h_timer_delete(timer_hdl);
 			goto fail_req;
 		}
 

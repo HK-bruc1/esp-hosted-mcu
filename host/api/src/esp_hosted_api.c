@@ -14,10 +14,10 @@ extern "C" {
 #include "esp_hosted_wifi_remote_glue.h"
 #include "port_esp_hosted_host_wifi_config.h"
 #include "port_esp_hosted_host_openthread.h"
-#include "port_esp_hosted_host_os.h"
+#include "h_port_config.h"
 #include "esp_hosted_misc.h"
 #include "esp_check.h"
-#include "transport_drv.h"
+#include "h_transport_drv.h"
 #include "rpc_wrap.h"
 #include "esp_log.h"
 #include "esp_hosted_event.h"
@@ -70,25 +70,6 @@ static void transport_active_cb(void)
 			NULL, 0, H_BLOCK_MAX);
 }
 
-#if 0
-static void create_esp_hosted_transport_up_sem(void)
-{
-	if (!transport_up_sem) {
-		transport_up_sem = g_h.funcs->_h_create_semaphore(1);
-		assert(transport_up_sem);
-		/* clear semaphore */
-		h_sem_take(transport_up_sem, 0);
-	}
-}
-
-esp_err_t esp_hosted_setup(void)
-{
-	create_esp_hosted_transport_up_sem();
-	h_sem_take(transport_up_sem, H_BLOCK_MAX);
-	h_sem_give(transport_up_sem);
-	return ESP_OK;
-}
-#endif
 
 static esp_remote_channel_t sta_ch = NULL;
 static esp_remote_channel_t ap_ch = NULL;
@@ -157,7 +138,7 @@ int esp_hosted_init(void)
 
 	//create_esp_hosted_transport_up_sem();
 	ESP_LOGI(TAG, "ESP-Hosted starting. Hosted_Tasks: prio:%u, stack: %u RPC_task_stack: %u",
-			DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, RPC_TASK_STACK_SIZE);
+			H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, H_DEFAULT_RPC_TASK_STACK);
 	if (esp_hosted_is_config_valid()) {
 		ESP_LOGW(TAG, "ESP-Hosted config valid; reuse existing config");
 	} else {

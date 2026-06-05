@@ -6,11 +6,14 @@
 # transport do not leak platform dependencies into the core layer,
 # and that control adapter boundaries are respected.
 #
-# Usage: scripts/check_current_platform_isolation.sh [spi|spi_hd|sdio|uart]
+# Usage: scripts/check_current_platform_isolation.sh [spi|spi_hd|sdio|uart] [--strict]
+#
+# Options:
+#   --strict    Treat allowlist hits as failures (allowlist hit = 0 required)
 #
 # Reference: docs/felix/current_platform_active_path_matrix.md
 # See also: scripts/check_core_isolation.sh (portable subset)
-#           docs/felix/22.Host通用框架移植到好型收口实施计划.md
+#           docs/felix/23.ESP32平台完全解耦与移植友好型收尾方案.md
 
 set -euo pipefail
 
@@ -22,27 +25,32 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# ── Usage ─────────────────────────────────────────────────────────────
-TRANSPORT="${1:-}"
+# ── Parse Options ─────────────────────────────────────────────────────
+STRICT_MODE=false
+TRANSPORT=""
+for arg in "$@"; do
+    case "$arg" in
+        --strict|-s)
+            STRICT_MODE=true
+            ;;
+        spi|spi_hd|sdio|uart)
+            TRANSPORT="$arg"
+            ;;
+        *)
+            echo -e "${RED}ERROR:${NC} Unknown argument '$arg'."
+            echo "Usage: $0 <transport> [--strict]"
+            echo "  transport: spi | spi_hd | sdio | uart"
+            exit 1
+            ;;
+    esac
+done
 
 if [ -z "$TRANSPORT" ]; then
-    echo "Usage: $0 <transport>"
+    echo "Usage: $0 <transport> [--strict]"
     echo "  transport: spi | spi_hd | sdio | uart"
-    echo ""
-    echo "Checks current-platform active path isolation for the given transport."
-    echo "Validates control adapter boundaries and transport adapter isolation."
-    echo ""
-    echo "Reference: docs/felix/current_platform_active_path_matrix.md"
+    echo "  --strict:  Treat allowlist hits as failures"
     exit 1
 fi
-
-case "$TRANSPORT" in
-    spi|spi_hd|sdio|uart) ;;
-    *)
-        echo -e "${RED}ERROR:${NC} Unknown transport '$TRANSPORT'. Must be: spi, spi_hd, sdio, or uart."
-        exit 1
-        ;;
-esac
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -107,6 +115,14 @@ TOOLS_FILES=(
     host/port/esp-idf/tools/stats.c
 )
 
+# Power-save — always compiled (no Kconfig guard), checked by Rule 1
+POWER_SAVE_FILES=(
+    host/drivers/power_save/power_save_drv.c
+)
+
+# BT VHCI — conditional-active (Kconfig-gated), checked by Rule 1 when present
+BT_VHCI_FILE="host/drivers/bt/vhci_drv.c"
+
 # Build the full active path file list for this transport
 ACTIVE_PATH_FILES=("${CORE_FILES[@]}")
 [ ${#TRANSPORT_DRV_FILES[@]} -gt 0 ] && ACTIVE_PATH_FILES+=("${TRANSPORT_DRV_FILES[@]}")
@@ -114,6 +130,8 @@ ACTIVE_PATH_FILES=("${CORE_FILES[@]}")
 ACTIVE_PATH_FILES+=("${CONTROL_ADAPTER_FILES[@]}")
 ACTIVE_PATH_FILES+=("${API_FILES[@]}")
 ACTIVE_PATH_FILES+=("${TOOLS_FILES[@]}")
+ACTIVE_PATH_FILES+=("${POWER_SAVE_FILES[@]}")
+[ -f "$BT_VHCI_FILE" ] && ACTIVE_PATH_FILES+=("$BT_VHCI_FILE")
 
 # ── Allowlist ──────────────────────────────────────────────────────────
 #
@@ -121,10 +139,9 @@ ACTIVE_PATH_FILES+=("${TOOLS_FILES[@]}")
 # These will shrink as migration work packages complete.
 
 # Files allowed to use g_h.funcs or ->_h_ (Rule 1)
-# — WP 1 migrated serial_ll_if.c and moved h_rpc_slave_if.c to port layer;
-#   API and tools migrated; remaining allowlist entries have documented reasons.
+# — Post WP 1-3: all required-active and conditional-active files are clean.
+#   Allowlist is empty; legacy port files are tracked separately.
 A1_GH_FUNCS=(
-    "host/api/src/esp_hosted_api.c"       # 1 g_h.funcs call in #if 0 block (dead code)
 )
 
 # Files allowed to include serial_ll_if.h (Rule 2)
@@ -270,14 +287,34 @@ R1_FILES=("${CORE_FILES[@]}")
 [ -f "$PORT_TRANSPORT_FILE" ] && R1_FILES+=("$PORT_TRANSPORT_FILE")
 R1_FILES+=("${CONTROL_ADAPTER_FILES[@]}")
 R1_FILES+=("${API_FILES[@]}")
-	R1_FILES+=("${TOOLS_FILES[@]}")
+R1_FILES+=("${TOOLS_FILES[@]}")
+R1_FILES+=("${POWER_SAVE_FILES[@]}")
+[ -f "$BT_VHCI_FILE" ] && R1_FILES+=("$BT_VHCI_FILE")
+
+# Rule 1a: Legacy vtable patterns — applies to ALL active files
+run_rule_check \
+    "Rule 1a: Legacy vtable (g_h.funcs / ->_h_ / HOSTED_* macros / H_DEFLT_FREE_FUNC)" \
+    'g_h\.funcs\|->_h_\|HOSTED_FREE\|HOSTED_CALLOC\|HOSTED_MALLOC\|HOSTED_FREE_HANDLE\|H_DEFLT_FREE_FUNC' \
+    "A1_GH_FUNCS" \
+    "core + transport driver + port + control adapters + API + tools + power-save + BT VHCI" \
+    "${R1_FILES[@]}"
+
+# Rule 1b: Consumer-only patterns (esp_hosted_tx / old headers / timer stubs)
+# Transport leaf drivers and h_transport_* port adapters are PROVIDERS —
+# they may legitimately call or define esp_hosted_tx as part of their adapter role.
+R1B_FILES=("${CORE_FILES[@]}")
+R1B_FILES+=("${CONTROL_ADAPTER_FILES[@]}")
+R1B_FILES+=("${API_FILES[@]}")
+R1B_FILES+=("${TOOLS_FILES[@]}")
+R1B_FILES+=("${POWER_SAVE_FILES[@]}")
+[ -f "$BT_VHCI_FILE" ] && R1B_FILES+=("$BT_VHCI_FILE")
 
 run_rule_check \
-    "Rule 1: Legacy vtable calls (g_h.funcs / ->_h_ / HOSTED_* macros)" \
-    'g_h\.funcs\|->_h_\|HOSTED_FREE\|HOSTED_CALLOC\|HOSTED_MALLOC\|HOSTED_FREE_HANDLE' \
+    "Rule 1b: Consumer legacy (esp_hosted_tx / old-headers / timer-stubs)" \
+    'esp_hosted_tx\|"transport_drv\.h"\|"port_esp_hosted_host_os\.h"\|h_timer_.*stub' \
     "A1_GH_FUNCS" \
-    "core + transport driver + port + control adapters + API + tools" \
-    "${R1_FILES[@]}"
+    "core + control adapters + API + tools + power-save + BT VHCI (excl. transport drivers/ports)" \
+    "${R1B_FILES[@]}"
 
 # ── Rule 2: serial_ll_if.h in core ─────────────────────────────────────
 #
@@ -395,7 +432,17 @@ echo "  Checks passed:       ${CHECKS_PASSED}"
 echo "  Checks failed:       ${CHECKS_FAILED}"
 echo "  Violations (FAIL):   ${VIOLATIONS}"
 echo "  Allowlist hits:      ${ALLOWLIST_HITS}"
+if $STRICT_MODE; then
+		echo "  Mode:                --strict (allowlist hits = failures)"
+	fi
 echo ""
+
+if $STRICT_MODE && [ "$ALLOWLIST_HITS" -gt 0 ]; then
+	echo -e "${RED}${BOLD}RESULT: FAIL${NC} — ${ALLOWLIST_HITS} allowlist hit(s) in strict mode."
+	echo ""
+	echo "  Strict mode requires zero allowlist hits."
+	exit 1
+fi
 
 if [ "$VIOLATIONS" -gt 0 ]; then
     echo -e "${RED}${BOLD}RESULT: FAIL${NC} — ${VIOLATIONS} isolation violation(s) found."
@@ -406,7 +453,7 @@ if [ "$VIOLATIONS" -gt 0 ]; then
     echo ""
     echo "  Refer to:"
     echo "    docs/felix/current_platform_active_path_matrix.md  (active path + allowlist)"
-    echo "    docs/felix/22.Host通用框架移植到好型收口实施计划.md   (migration plan)"
+    echo "    docs/felix/23.ESP32平台完全解耦与移植友好型收尾方案.md   (closure plan)"
     echo "    scripts/check_core_isolation.sh                    (portable core check)"
     exit 1
 else

@@ -207,10 +207,13 @@ To port to a new host MCU, create a new directory under `host/port/`, implement 
 
 ### Legacy Compatibility
 
-Some legacy ESP-IDF-specific code remains during the transition:
+Some legacy ESP-IDF-specific code remains during the transition and is still actively compiled:
+
 - `host/api/src/esp_wifi_weak.c` — weak function fallbacks bridging to `esp_wifi_remote_*`
-- `host/drivers/transport/transport_drv.c` / `transport_util.c` — legacy transport utilities still referenced by some paths
-- `host/port/esp/freertos/` — legacy FreeRTOS OS abstraction (being superseded by the contract system)
+- `host/port/esp/freertos/` — Legacy FreeRTOS OS abstraction and transport implementations. These are compiled alongside the new `host/port/esp-idf/` port layer. The new `h_transport_*.c` adapters call into legacy `hosted_spi_*/hosted_sdio_*/etc.` functions provided here. Marked for eventual retirement.
+- `host/drivers/transport/spi/spi_drv.c`, `sdio/sdio_drv.c`, `uart/uart_drv.c` — Transport drivers still compiled (legacy but active)
+- `host/drivers/rpc/` — Legacy RPC code; only headers are used (include path), sources are NOT compiled. The new RPC core at `host/core/src/h_rpc_*.c` is the active implementation.
+- `host/drivers/transport/transport_drv.c` / `transport_util.c` — Legacy transport orchestrator; superseded by `host/core/src/h_transport_drv.c`
 
 New code should use the core layer (`host/core/`) and contract wrappers (`h_wrapper.h`).
 
@@ -233,7 +236,13 @@ The `tools/check_weak_functions.py` tool ensures every `esp_wifi_*` API implemen
 5. Document in `docs/implemented_rpcs.md`
 6. Run `pre-commit run --all-files` to validate consistency
 
-## Key Configuration (Kconfig)
+## Critical Gotchas
+
+- **`common/protobuf-c` is a git submodule** — clone with `--recurse-submodules` or run `git submodule update --init`.
+- **Slave and every example are separate ESP-IDF projects** — each has its own `CMakeLists.txt` calling `project()`. You cannot run `idf.py` from the repo root.
+- **The component uses `WHOLE_ARCHIVE`** (`idf_component_set_property WHOLE_ARCHIVE TRUE` in root `CMakeLists.txt`) to prevent the linker from dropping weak function overrides from `host/api/src/esp_wifi_weak.c`.
+- **Transport selection is compile-time via Kconfig**, not runtime. The CMakeLists conditionally includes only one transport driver.
+- **Dual port layers**: Both `host/port/esp-idf/` (new portable layer) and `host/port/esp/freertos/` (legacy) are compiled simultaneously. The new `h_transport_*.c` adapters call into legacy `hosted_spi_*/hosted_sdio_*/etc.` implementations. The legacy code is marked for eventual retirement but remains active.
 
 The top-level `Kconfig` defines options under `Component config > ESP-Hosted`:
 
@@ -251,8 +260,8 @@ Feature-specific docs:
 
 Versions are synchronized across three files by the pre-commit hook (`tools/check_fw_versions.py`):
 
-- `idf_component.yml`
-- `host/api/include/esp_hosted_host_fw_ver.h`
+- `idf_component.yml` (line 1)
+- `host/esp_hosted_host_fw_ver.h`
 - `slave/main/esp_hosted_coprocessor_fw_ver.h`
 
 Do not manually edit only one of these.
@@ -268,8 +277,11 @@ Do not manually edit only one of these.
 | `host/port/esp-idf/` | ESP-IDF port: OSAL, transport HAL, type adapters |
 | `host/port/linux/` | Linux mock port for testing |
 | `host/api/` | Public API layer and weak function definitions |
-| `host/drivers/transport/` | Legacy transport abstraction and driver files |
+| `host/drivers/transport/` | Transport drivers (`spi/spi_drv.c`, `sdio/sdio_drv.c`, `uart/uart_drv.c`) — actively compiled |
+| `host/drivers/rpc/` | Legacy RPC code (`rpc_wrap.c`, `rpc_core.c`) — headers only, NOT compiled as sources; superseded by `host/core/src/h_rpc_*.c` |
 | `host/drivers/bt/` | Bluetooth VHCI / HCI stub drivers |
+| `host/port/esp/freertos/` | Legacy port layer (active, compiled alongside new `esp-idf/` port) |
+| `host/port/esp-idf/` | New portable port layer (OSAL, event, transport adapters, type conversion) |
 | `slave/main/` | Co-processor main application, control, Wi-Fi, BT handlers |
 | `common/proto/` | Protobuf definitions and generated code |
 | `common/mempool/` | Custom memory pool allocator |

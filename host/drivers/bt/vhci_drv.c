@@ -10,8 +10,8 @@
 
 #include "esp_hosted_transport.h"
 #include "esp_hosted_os_abstraction.h"
-#include "transport_drv.h"
-#include "port_esp_hosted_host_os.h"
+#include "h_transport_drv.h"
+#include "h_wrapper.h"
 #include "hci_drv.h"
 
 #ifndef __WEAK__
@@ -170,7 +170,7 @@ int ble_transport_to_ll_acl_impl(struct os_mbuf *om)
 	uint8_t * data = NULL;
 	int res;
 
-	data = g_h.funcs->_h_malloc_align(data_len, HOSTED_MEM_ALIGNMENT_64);
+	data = h_malloc_align(data_len, H_MEM_ALIGNMENT_64);
 	if (!data) {
 		ESP_LOGE(TAG, "Tx %s: malloc failed", __func__);
 		res = ESP_FAIL;
@@ -182,12 +182,12 @@ int ble_transport_to_ll_acl_impl(struct os_mbuf *om)
 	if (res) {
 		ESP_LOGE(TAG, "Tx: Error copying HCI_H4_ACL data %d", res);
         os_mbuf_free_chain(om);
-		g_h.funcs->_h_free_align(data);
+		h_free_align(data);
 		res = ESP_FAIL;
 		goto exit;
 	}
 
-	res = esp_hosted_tx(ESP_HCI_IF, 0, data, data_len, H_BUFF_NO_ZEROCOPY, data, H_DEFLT_FREE_FUNC, 0);
+	res = h_transmit(ESP_HCI_IF, 0, data, data_len, H_BUFF_NO_ZEROCOPY, data, h_free_fn, 0);
 
  exit:
 	os_mbuf_free_chain(om);
@@ -205,7 +205,7 @@ int ble_transport_to_ll_cmd_impl(void *buf)
 	uint8_t * data = NULL;
 	int res;
 
-	data = g_h.funcs->_h_malloc_align(buf_len, HOSTED_MEM_ALIGNMENT_64);
+	data = h_malloc_align(buf_len, H_MEM_ALIGNMENT_64);
 	if (!data) {
 		ESP_LOGE(TAG, "Tx %s: malloc failed", __func__);
 		res =  ESP_FAIL;
@@ -215,7 +215,7 @@ int ble_transport_to_ll_cmd_impl(void *buf)
 	data[0] = HCI_H4_CMD;
 	memcpy(&data[1], buf, buf_len - 1);
 
-	res = esp_hosted_tx(ESP_HCI_IF, 0, data, buf_len, H_BUFF_NO_ZEROCOPY, data, H_DEFLT_FREE_FUNC, 0);
+	res = h_transmit(ESP_HCI_IF, 0, data, buf_len, H_BUFF_NO_ZEROCOPY, data, h_free_fn, 0);
 
  exit:
 	ble_transport_free(buf);
@@ -261,14 +261,14 @@ void hosted_hci_bluedroid_send(uint8_t *data, uint16_t len)
 	int res;
 	uint8_t * ptr = NULL;
 
-	ptr = g_h.funcs->_h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
+	ptr = h_malloc_align(len, H_MEM_ALIGNMENT_64);
 	if (!ptr) {
 		ESP_LOGE(TAG, "%s: malloc failed", __func__);
 		return;
 	}
 	memcpy(ptr, data, len);
 
-	res = esp_hosted_tx(ESP_HCI_IF, 0, ptr, len, H_BUFF_NO_ZEROCOPY, ptr, H_DEFLT_FREE_FUNC, 0);
+	res = h_transmit(ESP_HCI_IF, 0, ptr, len, H_BUFF_NO_ZEROCOPY, ptr, h_free_fn, 0);
 
 	if (res) {
 		ESP_LOGE(TAG, "%s: Tx failed", __func__);

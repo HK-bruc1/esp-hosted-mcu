@@ -4,11 +4,14 @@
 #ifndef H_PORT_CONFIG_ESPIDF_H
 #define H_PORT_CONFIG_ESPIDF_H
 
+#include <stddef.h>    /* NULL */
+
 #if __has_include("sdkconfig.h")
 #include "sdkconfig.h"
 #endif
 
 #include "esp_idf_version.h"
+#include "esp_hosted_transport.h"  /* ESP_TRANSPORT_*_MAX_BUF_SIZE */
 
 /* Keep this header self-contained for ESP-IDF port files that include it
  * directly before h_config.h has defined the transport enum constants. */
@@ -57,12 +60,54 @@
 #undef H_HOST_USES_STATIC_NETIF
 #define H_HOST_USES_STATIC_NETIF 1
 
-/* ── Thread config from Kconfig ── */
-#if defined(CONFIG_ESP_HOSTED_DFLT_TASK_STACK)
-  #define H_DEFAULT_TASK_STACK  CONFIG_ESP_HOSTED_DFLT_TASK_STACK
+/* ── Thread defaults (Kconfig with fallback to legacy values) ── */
+#ifndef H_DEFAULT_TASK_STACK
+  #define H_DEFAULT_TASK_STACK   (5*1024)
 #endif
-#if defined(CONFIG_ESP_HOSTED_DFLT_TASK_PRIO)
-  #define H_DEFAULT_TASK_PRIO   CONFIG_ESP_HOSTED_DFLT_TASK_PRIO
+#ifndef H_DEFAULT_TASK_PRIO
+  #define H_DEFAULT_TASK_PRIO    23
+#endif
+#define H_DEFAULT_RPC_TASK_STACK  (5*1024)
+
+/* ── Common GPIO / misc (was in port_esp_hosted_host_os.h / host_config.h) ── */
+#define H_ENABLE   1
+#define H_DISABLE  0
+#define H_GPIO_MODE_INPUT    1
+#define H_GPIO_PULL_UP       1
+#define H_GPIO_PULL_DOWN     0
+#ifdef CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE
+  #define H_GPIO_PIN_RESET   CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE
+#else
+  #define H_GPIO_PIN_RESET   (-1)
+#endif
+#define H_GPIO_PORT_RESET  NULL
+
+/* ── Transport buffer size (per-transport, from Kconfig) ── */
+#if   H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
+  #define H_MAX_TRANSPORT_BUFFER_SIZE  ESP_TRANSPORT_SPI_MAX_BUF_SIZE
+#elif H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO
+  #define H_MAX_TRANSPORT_BUFFER_SIZE  ESP_TRANSPORT_SDIO_MAX_BUF_SIZE
+#elif H_TRANSPORT_IN_USE == H_TRANSPORT_SPI_HD
+  #define H_MAX_TRANSPORT_BUFFER_SIZE  ESP_TRANSPORT_SPI_HD_MAX_BUF_SIZE
+#elif H_TRANSPORT_IN_USE == H_TRANSPORT_UART
+  #define H_MAX_TRANSPORT_BUFFER_SIZE  ESP_TRANSPORT_UART_MAX_BUF_SIZE
+#endif
+
+/* ── Host Power-Save Kconfig mappings (was in port_esp_hosted_host_config.h) ── */
+#ifdef CONFIG_ESP_HOSTED_HOST_POWER_SAVE_ENABLED
+  #define H_HOST_PS_ALLOWED  1
+  #define H_HOST_WAKEUP_GPIO  CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO
+  #define H_HOST_WAKEUP_GPIO_PORT  NULL
+  #ifdef CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO_LEVEL
+    #define H_HOST_WAKEUP_GPIO_LEVEL  CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO_LEVEL
+  #else
+    #define H_HOST_WAKEUP_GPIO_LEVEL  1
+  #endif
+#else
+  #define H_HOST_PS_ALLOWED  0
+  #define H_HOST_WAKEUP_GPIO  (-1)
+  #define H_HOST_WAKEUP_GPIO_PORT  NULL
+  #define H_HOST_WAKEUP_GPIO_LEVEL  1
 #endif
 
 /* ── Phase 2 feature flags — explicitly 0 for Phase 1 ── */
