@@ -34,6 +34,13 @@
 #ifndef H_DEFAULT_TASK_PRIO
 #define H_DEFAULT_TASK_PRIO   5
 #endif
+#ifndef H_DEFAULT_RPC_TASK_STACK
+#define H_DEFAULT_RPC_TASK_STACK  H_DEFAULT_TASK_STACK
+#endif
+
+#ifndef H_SEC_TO_MILLISEC
+#define H_SEC_TO_MILLISEC(x)  (1000U * (x))
+#endif
 
 /* ── Feature Flags (Phase 1) ──
  * Disabled by default; enabled per-feature in future phases. */

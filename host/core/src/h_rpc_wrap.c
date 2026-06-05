@@ -92,7 +92,7 @@ typedef struct {
 } supp_cb_queue_item_t;
 
 static void * rpc_supp_cb_thread_hdl = NULL;
-static queue_handle_t rpc_supp_cb_thread_q = NULL;
+static h_queue_t rpc_supp_cb_thread_q = NULL;
 
 static void rpc_supp_thread(void *arg);
 static h_err_t rpc_supp_cb_thread_start(void);
@@ -2392,8 +2392,8 @@ static h_err_t rpc_supp_cb_thread_start(void)
 
 	// create and start the thread
 	if (!rpc_supp_cb_thread_hdl) {
-		ret = h_thread_create("rpc_supp_cb", RPC_TASK_PRIO,
-			RPC_TASK_STACK_SIZE, rpc_supp_thread, NULL, &rpc_supp_cb_thread_hdl);
+		ret = h_thread_create("rpc_supp_cb", H_DEFAULT_TASK_PRIO,
+			H_DEFAULT_RPC_TASK_STACK, rpc_supp_thread, NULL, &rpc_supp_cb_thread_hdl);
 		if (ret != H_OK) {
 			rpc_supp_cb_thread_hdl = NULL;
 		}

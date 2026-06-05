@@ -46,7 +46,7 @@ DEFINE_LOG_TAG(spi);
 #endif
 
 void * spi_handle = NULL;
-semaphore_handle_t spi_trans_ready_sem;
+static h_semaphore_t spi_trans_ready_sem;
 static volatile uint8_t dr_isr_triggered = 0;
 
 static uint8_t schedule_dummy_rx = 0;
@@ -65,18 +65,18 @@ static hosted_mempool_t * buf_mp_g;
 static void * spi_bus_lock;
 
 /* Queue declaration */
-static queue_handle_t to_slave_queue[MAX_PRIORITY_QUEUES];
-semaphore_handle_t sem_to_slave_queue;
-static queue_handle_t from_slave_queue[MAX_PRIORITY_QUEUES];
-semaphore_handle_t sem_from_slave_queue;
+static h_queue_t to_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_to_slave_queue;
+static h_queue_t from_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_from_slave_queue;
 
 static void * spi_rx_thread;
 
 
 /** function declaration **/
 /** Exported functions **/
-static void spi_transaction_task(void const* pvParameters);
-static void spi_process_rx_task(void const* pvParameters);
+static void spi_transaction_task(void *pvParameters);
+static void spi_process_rx_task(void *pvParameters);
 static uint8_t * get_next_tx_buffer(uint8_t *is_valid_tx_buf, void (**free_func)(void* ptr));
 
 #if H_HOST_USES_STATIC_NETIF
@@ -131,7 +131,7 @@ static inline void spi_mempool_create(int tx_q_size, int rx_q_size)
 		// allocate enough blocks to handle full RX and possible peak tx requests
 		.num_blocks = rx_q_size + MIN_MEMPOOL_REQ,
 		.block_size = MAX_SPI_BUFFER_SIZE,
-		.alignment_in_bytes = HOSTED_MEM_ALIGNMENT_64,
+		.alignment_in_bytes = H_MEM_ALIGNMENT_64,
 		.malloc = transport_util_malloc,
 		.calloc = transport_util_calloc,
 		.memset = h_memset_fn,
@@ -178,7 +178,7 @@ static void FAST_RAM_ATTR gpio_hs_isr_handler(void* arg)
 	}
 	lasthandshaketime_us = currtime_us;
 #endif
-	h_sem_give_from_isr(spi_trans_ready_sem);
+	h_sem_give_from_isr(spi_trans_ready_sem, NULL);
 	ESP_EARLY_LOGV(TAG, "%s", __func__);
 }
 
@@ -187,7 +187,7 @@ This ISR is called when the handshake or data_ready line goes high.
 */
 static void FAST_RAM_ATTR gpio_dr_isr_handler(void* arg)
 {
-	h_sem_give_from_isr(spi_trans_ready_sem);
+	h_sem_give_from_isr(spi_trans_ready_sem, NULL);
 	dr_isr_triggered = 1;
 	ESP_EARLY_LOGV(TAG, "%s", __func__);
 }
@@ -308,13 +308,13 @@ void *bus_init_internal(void)
 	}
 
 	/* Task - SPI transaction (full duplex) */
-	assert(h_thread_create("spi_trans", DFLT_TASK_PRIO,
-			DFLT_TASK_STACK_SIZE, spi_transaction_task, NULL,
+	assert(h_thread_create("spi_trans", H_DEFAULT_TASK_PRIO,
+			H_DEFAULT_TASK_STACK, spi_transaction_task, NULL,
 			&spi_transaction_thread) == H_OK);
 
 	/* Task - RX processing */
-	assert(h_thread_create("spi_rx", DFLT_TASK_PRIO,
-			DFLT_TASK_STACK_SIZE, spi_process_rx_task, NULL,
+	assert(h_thread_create("spi_rx", H_DEFAULT_TASK_PRIO,
+			H_DEFAULT_TASK_STACK, spi_process_rx_task, NULL,
 			&spi_rx_thread) == H_OK);
 
 	return spi_handle;
@@ -413,7 +413,7 @@ static int process_spi_rx_buf(uint8_t * rxbuff)
 				pkt_prio = PRIO_Q_BT;
 			/* else OTHERS by default */
 
-			h_queue_send(from_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
+			h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 			h_sem_give(sem_from_slave_queue);
 
 		} else {
@@ -452,7 +452,7 @@ static int check_and_execute_spi_transaction(void)
 	gpio_pin_state_t gpio_handshake = H_HS_VAL_INACTIVE;
 	gpio_pin_state_t gpio_rx_data_ready = H_DR_VAL_INACTIVE;
 
-	h_mutex_lock(spi_bus_lock, HOSTED_BLOCK_MAX);
+	h_mutex_lock(spi_bus_lock, H_BLOCK_MAX);
 
 	/* handshake line SET -> slave ready for next transaction */
 	gpio_handshake = h_gpio_read(H_GPIO_HANDSHAKE_Pin);
@@ -583,7 +583,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		pkt_prio = PRIO_Q_BT;
 	/* else OTHERS by default */
 
-	h_queue_send(to_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
+	h_queue_send(to_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 	h_sem_give(sem_to_slave_queue);
 
 #if ESP_PKT_STATS
@@ -605,7 +605,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
   * @param  argument: Not used
   * @retval None
   */
-static void spi_transaction_task(void const* pvParameters)
+static void spi_transaction_task(void *pvParameters)
 {
 	/* Netif creation is now handled by the example code */
 #if H_HOST_USES_STATIC_NETIF
@@ -642,7 +642,7 @@ static void spi_transaction_task(void const* pvParameters)
 		 * on Either Data ready and Handshake pin
 		 */
 
-		if (h_sem_take(spi_trans_ready_sem, HOSTED_BLOCK_MAX) == SUCCESS) {
+		if (h_sem_take(spi_trans_ready_sem, H_BLOCK_MAX) == SUCCESS) {
 			check_and_execute_spi_transaction();
 		}
 	}
@@ -653,7 +653,7 @@ static void spi_transaction_task(void const* pvParameters)
   * @param  argument: Not used
   * @retval None
   */
-static void spi_process_rx_task(void const* pvParameters)
+static void spi_process_rx_task(void *pvParameters)
 {
 	interface_buffer_handle_t buf_handle_l = {0};
 	interface_buffer_handle_t *buf_handle = NULL;
@@ -661,7 +661,7 @@ static void spi_process_rx_task(void const* pvParameters)
 
 	while (1) {
 
-		h_sem_take(sem_from_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_from_slave_queue, H_BLOCK_MAX);
 
 		if (h_queue_recv(from_slave_queue[PRIO_Q_SERIAL], &buf_handle_l, 0))
 			if (h_queue_recv(from_slave_queue[PRIO_Q_BT], &buf_handle_l, 0))
@@ -894,7 +894,7 @@ void check_if_max_freq_used(uint8_t chip_type)
 static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 {
 	ESP_LOGI(TAG, "Resetting slave on SPI bus with pin %d", reset_pin.pin);
-	h_gpio_config(reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
+	h_gpio_config(reset_pin.pin, H_GPIO_MODE_OUTPUT);
 	h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
 	h_msleep(10);
 	h_gpio_write(reset_pin.pin, H_RESET_VAL_INACTIVE);
@@ -972,7 +972,7 @@ int bus_inform_slave_host_power_save_start(void)
 		spi_trans.rx_buf = rxbuff;
 
 		/* Execute direct SPI transaction - bypass all queues */
-		h_mutex_lock(spi_bus_lock, HOSTED_BLOCK_MAX);
+		h_mutex_lock(spi_bus_lock, H_BLOCK_MAX);
 		ret = h_spi_transfer(spi_handle, &spi_trans);
 		h_mutex_unlock(spi_bus_lock);
 
@@ -1030,7 +1030,7 @@ int bus_inform_slave_host_power_save_stop(void)
 		spi_trans.rx_buf = rxbuff;
 
 		/* Execute direct SPI transaction - bypass all queues */
-		h_mutex_lock(spi_bus_lock, HOSTED_BLOCK_MAX);
+		h_mutex_lock(spi_bus_lock, H_BLOCK_MAX);
 		ret = h_spi_transfer(spi_handle, &spi_trans);
 		h_mutex_unlock(spi_bus_lock);
 

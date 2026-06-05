@@ -218,7 +218,7 @@ static int process_rpc_tx_msg(ctrl_cmd_t *app_req)
 			H_LOGE(TAG, "Failed to create async resp timer");
 			goto fail_req;
 		}
-		timer_ret = h_timer_start(timer_hdl, SEC_TO_MILLISEC(app_req->rsp_timeout_sec), false,
+		timer_ret = h_timer_start(timer_hdl, H_SEC_TO_MILLISEC(app_req->rsp_timeout_sec), false,
 				rpc_async_timeout_handler, app_req);
 		if (timer_ret != H_OK) {
 			H_LOGE(TAG, "Failed to start async resp timer");
@@ -582,11 +582,11 @@ static int spawn_rpc_threads(void)
 {
 	/* create new thread for rpc RX path handling */
 	int thread_ret;
-	thread_ret = h_thread_create("rpc_rx", RPC_TASK_PRIO,
-			RPC_TASK_STACK_SIZE, rpc_rx_thread, NULL, &rpc_rx_thread_hdl);
+	thread_ret = h_thread_create("rpc_rx", H_DEFAULT_TASK_PRIO,
+			H_DEFAULT_RPC_TASK_STACK, rpc_rx_thread, NULL, &rpc_rx_thread_hdl);
 	if (thread_ret == H_OK) {
-		thread_ret = h_thread_create("rpc_tx", RPC_TASK_PRIO,
-				RPC_TASK_STACK_SIZE, rpc_tx_thread, NULL, &rpc_tx_thread_hdl);
+		thread_ret = h_thread_create("rpc_tx", H_DEFAULT_TASK_PRIO,
+				H_DEFAULT_RPC_TASK_STACK, rpc_tx_thread, NULL, &rpc_tx_thread_hdl);
 	}
 	if (thread_ret != H_OK || !rpc_rx_thread_hdl || !rpc_tx_thread_hdl) {
 		H_LOGE(TAG, "Thread creation failed for rpc_rx_thread");
@@ -645,7 +645,7 @@ static ctrl_cmd_t * get_response(int *read_len, ctrl_cmd_t *app_req)
 	/* Wait for response */
 	ret = wait_for_sync_response(app_req);
 	if (ret) {
-		if ((ret == RET_FAIL_TIMEOUT) || (errno == ETIMEDOUT))
+		if ((ret == H_ERR_TIMEOUT) || (errno == ETIMEDOUT))
 			H_LOGW(TAG, "Timeout waiting for Resp for [0x%x](%s)", app_req->msg_id, rpc_id_name(app_req->msg_id));
 		else
 			H_LOGE(TAG, "ERR [%u] ret[%d] for [0x%x](%s)", errno, ret, app_req->msg_id, rpc_id_name(app_req->msg_id));

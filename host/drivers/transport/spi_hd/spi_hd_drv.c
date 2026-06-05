@@ -78,7 +78,7 @@ static void * spi_hd_bus_lock;
 		h_mutex_delete(spi_hd_bus_lock);                \
 	} while (0);
 
-#define SPI_HD_DRV_LOCK()   h_mutex_lock(spi_hd_bus_lock, HOSTED_BLOCK_MAX);
+#define SPI_HD_DRV_LOCK()   h_mutex_lock(spi_hd_bus_lock, H_BLOCK_MAX);
 #define SPI_HD_DRV_UNLOCK() h_mutex_unlock(spi_hd_bus_lock);
 
 #else
@@ -137,7 +137,7 @@ static inline void spi_hd_mempool_create(int tx_q_size, int rx_q_size)
 		// allocate enough blocks to handle full RX and possible peak tx requests
 		.num_blocks = rx_q_size + MIN_MEMPOOL_REQ,
 		.block_size = MAX_SPI_HD_BUFFER_SIZE,
-		.alignment_in_bytes = HOSTED_MEM_ALIGNMENT_64,
+		.alignment_in_bytes = H_MEM_ALIGNMENT_64,
 		.malloc = transport_util_malloc,
 		.calloc = transport_util_calloc,
 		.memset = h_memset_fn,
@@ -156,7 +156,7 @@ static inline void spi_hd_mempool_destroy(void)
 #endif
 }
 
-static inline void *spi_hd_buffer_alloc(uint need_memset)
+static inline void *spi_hd_buffer_alloc(uint32_t need_memset)
 {
 	MEMPOOL_ALLOC(buf_mp_g, MAX_SPI_HD_BUFFER_SIZE, need_memset);
 }
@@ -242,7 +242,7 @@ static void spi_hd_write_task(void *pvParameters)
 
 	for (;;) {
 		/* Check if higher layers have anything to transmit */
-		h_sem_take(sem_to_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_to_slave_queue, H_BLOCK_MAX);
 
 		/* Tx msg is present as per sem */
 		if (h_queue_recv(to_slave_queue[PRIO_Q_SERIAL], &buf_handle, 0))
@@ -472,7 +472,7 @@ static esp_err_t spi_hd_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16
 		pkt_prio = PRIO_Q_BT;
 	/* else OTHERS by default */
 
-	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
+	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 	h_sem_give(sem_from_slave_queue);
 
 	return ESP_OK;
@@ -555,7 +555,7 @@ static void spi_hd_read_task(void *pvParameters)
 	// we are now ready to receive data from slave
 	while (1) {
 		// wait for read semaphore to trigger
-		h_sem_take(spi_hd_data_ready_sem, HOSTED_BLOCK_MAX);
+		h_sem_take(spi_hd_data_ready_sem, H_BLOCK_MAX);
 		ESP_LOGV(TAG, "spi_hd_read_task: data ready intr received");
 
 		SPI_HD_DRV_LOCK();
@@ -668,7 +668,7 @@ static void spi_hd_process_rx_task(void *pvParameters)
 	ESP_LOGI(TAG, "spi_hd_process_rx_task: transport rx ready");
 
 	while (1) {
-		h_sem_take(sem_from_slave_queue, HOSTED_BLOCK_MAX);
+		h_sem_take(sem_from_slave_queue, H_BLOCK_MAX);
 
 		if (h_queue_recv(from_slave_queue[PRIO_Q_SERIAL], &buf_handle_l, 0))
 			if (h_queue_recv(from_slave_queue[PRIO_Q_BT], &buf_handle_l, 0))
@@ -786,15 +786,15 @@ void * bus_init_internal(void)
 	spi_hd_mempool_create(H_SPI_HD_TX_QUEUE_SIZE, H_SPI_HD_RX_QUEUE_SIZE);
 
 	assert(h_thread_create("spi_hd_read",
-			DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, spi_hd_read_task, NULL,
+			H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, spi_hd_read_task, NULL,
 			&spi_hd_read_thread) == H_OK);
 
 	assert(h_thread_create("spi_hd_process_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, spi_hd_process_rx_task, NULL,
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, spi_hd_process_rx_task, NULL,
 		&spi_hd_process_rx_thread) == H_OK);
 
 	assert(h_thread_create("spi_hd_write",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, spi_hd_write_task, NULL,
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, spi_hd_write_task, NULL,
 		&spi_hd_write_thread) == H_OK);
 
 	if (h_transport_init(&spi_hd_handle) != H_OK || !spi_hd_handle) {
@@ -914,7 +914,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 	else if (buf_handle.if_type == ESP_HCI_IF)
 		pkt_prio = PRIO_Q_BT;
 
-	h_queue_send(to_slave_queue[pkt_prio], &buf_handle, HOSTED_BLOCK_MAX);
+	h_queue_send(to_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 	h_sem_give(sem_to_slave_queue);
 
 #if ESP_PKT_STATS
@@ -949,7 +949,7 @@ int ensure_slave_bus_ready(void *bus_handle)
 	if (!esp_hosted_woke_from_power_save()) {
 		/* Reset the slave */
 		ESP_LOGI(TAG, "Resetting slave on SPI HD bus with pin %d", reset_pin.pin);
-		h_gpio_config(reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
+		h_gpio_config(reset_pin.pin, H_GPIO_MODE_OUTPUT);
 		h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
 		h_msleep(10);
 		h_gpio_write(reset_pin.pin, H_RESET_VAL_INACTIVE);

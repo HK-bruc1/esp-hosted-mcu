@@ -71,6 +71,12 @@ typedef enum {
 #define H_GPIO_MODE_DEF_INPUT           (BIT0)    ///< bit mask for input
 #define H_GPIO_MODE_DEF_OUTPUT          (BIT1)    ///< bit mask for output
 #define H_GPIO_MODE_DEF_OD              (BIT2)    ///< bit mask for OD mode
+#ifdef H_GPIO_MODE_INPUT
+#undef H_GPIO_MODE_INPUT
+#endif
+#ifdef H_GPIO_MODE_OUTPUT
+#undef H_GPIO_MODE_OUTPUT
+#endif
 enum {
 	H_GPIO_MODE_DISABLE = H_GPIO_MODE_DEF_DISABLE,                                                         /*!< GPIO mode : disable input and output             */
 	H_GPIO_MODE_INPUT = H_GPIO_MODE_DEF_INPUT,                                                             /*!< GPIO mode : input only                           */
@@ -80,6 +86,12 @@ enum {
 	H_GPIO_MODE_INPUT_OUTPUT = ((H_GPIO_MODE_DEF_INPUT) | (H_GPIO_MODE_DEF_OUTPUT)),                         /*!< GPIO mode : output and input mode                */
 };
 
+#ifdef H_GPIO_PULL_UP
+#undef H_GPIO_PULL_UP
+#endif
+#ifdef H_GPIO_PULL_DOWN
+#undef H_GPIO_PULL_DOWN
+#endif
 #define H_GPIO_PULL_UP                             (1)
 #define H_GPIO_PULL_DOWN                           (0)
 

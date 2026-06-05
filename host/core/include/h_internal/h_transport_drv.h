@@ -43,6 +43,10 @@ extern "C" {
 #define MAX_SPI_HD_BUFFER_SIZE            ESP_TRANSPORT_SPI_HD_MAX_BUF_SIZE
 #define MAX_UART_BUFFER_SIZE              ESP_TRANSPORT_UART_MAX_BUF_SIZE
 
+#ifndef MAX_PAYLOAD_SIZE
+#define MAX_PAYLOAD_SIZE                  (H_MAX_TRANSPORT_BUFFER_SIZE - H_ESP_PAYLOAD_HEADER_OFFSET)
+#endif
+
 #ifndef BIT
 #define BIT(x)                            (1UL << (x))
 #endif

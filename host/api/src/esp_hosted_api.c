@@ -65,9 +65,9 @@ static void transport_active_cb(void)
 {
 	ESP_LOGI(TAG, "Transport active");
 	esp_hosted_transport_up = 1;
-	h_event_post(ESP_HOSTED_EVENT,
+	h_event_post(H_EVENT_HOSTED,
 			ESP_HOSTED_EVENT_TRANSPORT_UP,
-			NULL, 0, H_BLOCK_MAX);
+			NULL, 0);
 }
 
 
@@ -165,9 +165,9 @@ int esp_hosted_deinit(void)
 	h_hosted_deinit();
 	esp_hosted_init_done = 0;
 	esp_hosted_transport_up = 0;
-	h_event_post(ESP_HOSTED_EVENT,
+	h_event_post(H_EVENT_HOSTED,
 			ESP_HOSTED_EVENT_TRANSPORT_DOWN,
-			NULL, 0, H_BLOCK_MAX);
+			NULL, 0);
 	return ESP_OK;
 }
 

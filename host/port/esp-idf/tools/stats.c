@@ -107,7 +107,7 @@ void raw_tp_timer_func(void * arg)
 	test_raw_tx_len = test_raw_rx_len = 0;
 }
 
-static void raw_tp_tx_task(void const* pvParameters)
+static void raw_tp_tx_task(void *pvParameters)
 {
 	int ret;
 	static uint16_t seq_num = 0;
@@ -117,7 +117,7 @@ static void raw_tp_tx_task(void const* pvParameters)
 	h_msleep(5000);
 
 #if !DISABLE_MEMPOOL
-	buf_mp_g = mempool_create(MAX_TRANSPORT_BUFFER_SIZE);
+	buf_mp_g = mempool_create(H_MAX_TRANSPORT_BUFFER_SIZE);
 #ifdef H_USE_MEMPOOL
 	assert(buf_mp_g);
 #endif
@@ -126,7 +126,7 @@ static void raw_tp_tx_task(void const* pvParameters)
 	while (1) {
 
 #if CONFIG_H_LOWER_MEMCOPY
-		raw_tp_tx_buf = (uint8_t*)h_calloc(1, MAX_TRANSPORT_BUFFER_SIZE);
+		raw_tp_tx_buf = (uint8_t*)h_calloc(1, H_MAX_TRANSPORT_BUFFER_SIZE);
 
 		ptr = (uint32_t*) raw_tp_tx_buf;
 		for (i=0; i<(TEST_RAW_TP__BUF_SIZE/4-1); i++, ptr++)
@@ -136,10 +136,10 @@ static void raw_tp_tx_task(void const* pvParameters)
 
 #else
 #if DISABLE_MEMPOOL
-		raw_tp_tx_buf = h_malloc_align(MAX_TRANSPORT_BUFFER_SIZE, H_MEM_ALIGNMENT_64);
-		h_memset(raw_tp_tx_buf, 0, MAX_TRANSPORT_BUFFER_SIZE);
+		raw_tp_tx_buf = h_malloc_align(H_MAX_TRANSPORT_BUFFER_SIZE, H_MEM_ALIGNMENT_64);
+		h_memset(raw_tp_tx_buf, 0, H_MAX_TRANSPORT_BUFFER_SIZE);
 #else
-		raw_tp_tx_buf = mempool_alloc(buf_mp_g, MAX_TRANSPORT_BUFFER_SIZE, true);
+		raw_tp_tx_buf = mempool_alloc(buf_mp_g, H_MAX_TRANSPORT_BUFFER_SIZE, true);
 #endif
 		ptr = (uint32_t*) (raw_tp_tx_buf + H_ESP_PAYLOAD_HEADER_OFFSET);
 		for (i=0; i<(TEST_RAW_TP__BUF_SIZE/4-1); i++, ptr++)
@@ -169,7 +169,7 @@ static void process_raw_tp_flags(uint8_t cap)
 			return;
 		}
 		if (h_timer_start(hosted_timer_handler,
-		                  SEC_TO_MILLISEC(TEST_RAW_TP__TIMEOUT),
+		                  H_SEC_TO_MILLISEC(TEST_RAW_TP__TIMEOUT),
 		                  true, raw_tp_timer_func, NULL) != H_OK) {
 			ESP_LOGE(TAG, "Failed to start timer\n\r");
 			h_timer_delete(hosted_timer_handler);
@@ -248,7 +248,7 @@ void create_debugging_tasks(void)
 			return;
 		}
 		if (h_timer_start(pkt_stats_thread,
-		                  SEC_TO_MILLISEC(ESP_PKT_STATS_REPORT_INTERVAL),
+		                  H_SEC_TO_MILLISEC(ESP_PKT_STATS_REPORT_INTERVAL),
 		                  true, stats_timer_func, NULL) != H_OK) {
 			ESP_LOGE(TAG, "Failed to start pkt_stats timer");
 			h_timer_delete(pkt_stats_thread);

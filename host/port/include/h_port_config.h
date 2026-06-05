@@ -7,6 +7,13 @@
 #ifndef H_PORT_CONFIG_H
 #define H_PORT_CONFIG_H
 
+#if defined(ESP_PLATFORM) && __has_include_next("h_port_config.h")
+#include_next "h_port_config.h"
+#define H_PORT_CONFIG_FROM_PORT 1
+#endif
+
+#ifndef H_PORT_CONFIG_FROM_PORT
+
 /* When sdkconfig.h is available (ESP-IDF builds), use Kconfig-derived config.
  * Otherwise fall back to the Linux mock port config. */
 #if __has_include("sdkconfig.h")
@@ -52,5 +59,7 @@
 #define H_HOST_USES_STATIC_NETIF 1
 
 #endif /* !H_PORT_USING_LINUX_FALLBACK */
+
+#endif /* !H_PORT_CONFIG_FROM_PORT */
 
 #endif /* H_PORT_CONFIG_H */

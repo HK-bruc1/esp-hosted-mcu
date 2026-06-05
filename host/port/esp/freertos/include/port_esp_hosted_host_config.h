@@ -512,6 +512,12 @@ enum {
 
 #define USE_STD_C_LIB_MALLOC                         0
 
+#ifdef H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD
+#undef H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD
+#endif
+#ifdef H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD
+#undef H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD
+#endif
 #ifdef CONFIG_HOST_TO_ESP_WIFI_DATA_THROTTLE
   #define H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD        CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_LOW_THRESHOLD
   #define H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD       CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_HIGH_THRESHOLD
@@ -521,13 +527,25 @@ enum {
 #endif
 
 /* Raw Throughput Testing */
+#ifdef H_TEST_RAW_TP
+#undef H_TEST_RAW_TP
+#endif
 #define H_TEST_RAW_TP     CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TRANSPORT
 
 #if H_TEST_RAW_TP
 
+#ifdef H_RAW_TP_REPORT_INTERVAL
+#undef H_RAW_TP_REPORT_INTERVAL
+#endif
+#ifdef H_RAW_TP_PKT_LEN
+#undef H_RAW_TP_PKT_LEN
+#endif
   #define H_RAW_TP_REPORT_INTERVAL                     CONFIG_ESP_HOSTED_RAW_TP_REPORT_INTERVAL
   #define H_RAW_TP_PKT_LEN                             CONFIG_ESP_HOSTED_RAW_TP_HOST_TO_ESP_PKT_LEN
 
+#ifdef H_TEST_RAW_TP_DIR
+#undef H_TEST_RAW_TP_DIR
+#endif
   #if CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TX_TO_SLAVE
     #define H_TEST_RAW_TP_DIR (ESP_TEST_RAW_TP__HOST_TO_ESP)
   #elif CONFIG_ESP_HOSTED_RAW_THROUGHPUT_RX_FROM_SLAVE
@@ -539,20 +557,35 @@ enum {
   #endif
 
 #else
+#ifdef H_TEST_RAW_TP_DIR
+#undef H_TEST_RAW_TP_DIR
+#endif
   #define H_TEST_RAW_TP_DIR (ESP_TEST_RAW_TP_NONE)
 #endif
 
 /* ---------------------- Enable memory monitor ------------------------------ */
 
 #ifdef CONFIG_ESP_HOSTED_MEM_MONITOR
+  #ifdef H_MEM_MONITOR
+  #undef H_MEM_MONITOR
+  #endif
   #define H_MEM_MONITOR 1
 #else
+  #ifdef H_MEM_MONITOR
+  #undef H_MEM_MONITOR
+  #endif
   #define H_MEM_MONITOR 0
 #endif
 
 /* ----------------------- Enable packet stats ------------------------------- */
 
 #ifdef CONFIG_ESP_HOSTED_PKT_STATS
+  #ifdef ESP_PKT_STATS
+  #undef ESP_PKT_STATS
+  #endif
+  #ifdef ESP_PKT_STATS_REPORT_INTERVAL
+  #undef ESP_PKT_STATS_REPORT_INTERVAL
+  #endif
   #define ESP_PKT_STATS 1
   #define ESP_PKT_STATS_REPORT_INTERVAL  CONFIG_ESP_HOSTED_PKT_STATS_INTERVAL_SEC
 #endif
@@ -566,17 +599,32 @@ enum {
 
 #if defined(CONFIG_ESP_HOSTED_HOST_POWER_SAVE_ENABLED)
   #if defined(CONFIG_ESP_HOSTED_HOST_DEEP_SLEEP_ALLOWED)
+    #ifdef H_HOST_PS_ALLOWED
+    #undef H_HOST_PS_ALLOWED
+    #endif
     #define H_HOST_PS_ALLOWED 1
     #define H_HOST_PS_ALLOWED_LIGHT_SLEEP 0
   #else
+    #ifdef H_HOST_PS_ALLOWED
+    #undef H_HOST_PS_ALLOWED
+    #endif
     #define H_HOST_PS_ALLOWED 0
   #endif
 
   /* Amend later for light sleep */
 #else
+    #ifdef H_HOST_PS_ALLOWED
+    #undef H_HOST_PS_ALLOWED
+    #endif
     #define H_HOST_PS_ALLOWED 0
 #endif
 
+#ifdef H_HOST_WAKEUP_GPIO_PORT
+#undef H_HOST_WAKEUP_GPIO_PORT
+#endif
+#ifdef H_HOST_WAKEUP_GPIO
+#undef H_HOST_WAKEUP_GPIO
+#endif
 #if defined(CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO)
   #define H_HOST_WAKEUP_GPIO_PORT NULL
   #define H_HOST_WAKEUP_GPIO CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO
@@ -584,6 +632,9 @@ enum {
   #define H_HOST_WAKEUP_GPIO -1
 #endif
 
+#ifdef H_HOST_WAKEUP_GPIO_LEVEL
+#undef H_HOST_WAKEUP_GPIO_LEVEL
+#endif
 #if defined(CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO_LEVEL)
   #define H_HOST_WAKEUP_GPIO_LEVEL CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO_LEVEL
 #else

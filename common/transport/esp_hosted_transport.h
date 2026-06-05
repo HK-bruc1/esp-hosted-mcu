@@ -7,6 +7,8 @@
 #ifndef __ESP_HOSTED_TRANSPORT__H
 #define __ESP_HOSTED_TRANSPORT__H
 
+#include <stdint.h>
+
 #define PRIO_Q_SERIAL                             0
 #define PRIO_Q_BT                                 1
 #define PRIO_Q_OTHERS                             2

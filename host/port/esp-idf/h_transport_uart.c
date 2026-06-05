@@ -12,6 +12,7 @@
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_UART
 
 #include <esp_err.h>
+#include "driver/gpio.h"
 
 /* ──  Existing implementations (from host/port/esp/freertos/src/) ── */
 extern void     *hosted_uart_init(void);

@@ -36,7 +36,7 @@ static struct rx_data {
 } r;
 
 /* data structures needed for serial driver */
-static queue_handle_t to_serial_ll_intf_queue[MAX_SERIAL_INTF];
+static h_queue_t to_serial_ll_intf_queue[MAX_SERIAL_INTF];
 static serial_ll_handle_t * interface_handle_g[MAX_SERIAL_INTF] = {NULL};
 static uint8_t conn_num = 0;
 
@@ -253,7 +253,7 @@ static int serial_ll_write(const serial_ll_handle_t * serial_ll_hdl,
 					H_BUFF_NO_ZEROCOPY,
 					buf_to_free, free_func,
 					flags);
-		if (ret != ESP_OK) {
+		if (ret != H_OK) {
 			if (flags & MORE_FRAGMENT) {
 				H_FREE_PTR_WITH_FUNC(h_free_fn, wbuffer);
 			}

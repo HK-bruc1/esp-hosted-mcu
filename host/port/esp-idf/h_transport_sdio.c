@@ -8,10 +8,12 @@
 
 #include "h_port_contract.h"
 #include "h_port_config.h"
+#include "h_wrapper.h"
 
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO
 
 #include <esp_err.h>
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"  /* pdMS_TO_TICKS */
 
 /* ──  Existing implementations (from host/port/esp/freertos/src/) ── */

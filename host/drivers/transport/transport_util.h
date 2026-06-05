@@ -19,7 +19,7 @@
 #else // H_USE_MEMPOOL
 
   #define MEMPOOL_ALLOC(pool, nbytes, need_memset) do {        \
-    void *ptr = h_malloc_align(nbytes, HOSTED_MEM_ALIGNMENT_64);\
+    void *ptr = h_malloc_align(nbytes, H_MEM_ALIGNMENT_64);\
     if (ptr && need_memset)                                    \
       h_memset(ptr, 0, nbytes);                                \
     return ptr;                                                \

@@ -47,8 +47,8 @@ static const char TAG[] = "H_UART_DRV";
 // UART is low throughput, so throttling should not be needed
 #define USE_DATA_THROTTLING (0)
 
-static void h_uart_write_task(void const* pvParameters);
-static void h_uart_read_task(void const* pvParameters);
+static void h_uart_write_task(void *pvParameters);
+static void h_uart_read_task(void *pvParameters);
 #if USE_DATA_THROTTLING
 static int update_flow_ctrl(uint8_t *rxbuff);
 #endif
@@ -62,10 +62,10 @@ static void * h_uart_process_rx_task_info;
 
 static void * uart_handle = NULL;
 
-static queue_handle_t to_slave_queue[MAX_PRIORITY_QUEUES];
-static semaphore_handle_t sem_to_slave_queue;
-static queue_handle_t from_slave_queue[MAX_PRIORITY_QUEUES];
-static semaphore_handle_t sem_from_slave_queue;
+static h_queue_t to_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_to_slave_queue;
+static h_queue_t from_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_from_slave_queue;
 
 // one-time trigger to start write thread
 static bool uart_start_write_thread = false;
@@ -85,7 +85,7 @@ static inline void h_uart_mempool_create(int tx_q_size, int rx_q_size)
 		// allocate enough blocks to handle full RX and possible peak tx requests
 		.num_blocks = rx_q_size + MIN_MEMPOOL_REQ,
 		.block_size = MAX_UART_BUFFER_SIZE,
-		.alignment_in_bytes = HOSTED_MEM_ALIGNMENT_64,
+		.alignment_in_bytes = H_MEM_ALIGNMENT_64,
 		.malloc = transport_util_malloc,
 		.calloc = transport_util_calloc,
 		.memset = h_memset_fn,
@@ -104,7 +104,7 @@ static inline void h_uart_mempool_destroy(void)
 #endif
 }
 
-static inline void *h_uart_buffer_alloc(uint need_memset)
+static inline void *h_uart_buffer_alloc(uint32_t need_memset)
 {
 	MEMPOOL_ALLOC(buf_mp_g, MAX_UART_BUFFER_SIZE, need_memset);
 }
@@ -213,7 +213,7 @@ done:
 	return result;
 }
 
-static void h_uart_write_task(void const* pvParameters)
+static void h_uart_write_task(void *pvParameters)
 {
 	interface_buffer_handle_t buf_handle = {0};
 	uint8_t tx_needed = 1;
@@ -260,7 +260,7 @@ static int update_flow_ctrl(uint8_t *rxbuff)
 }
 #endif
 
-static void h_uart_process_rx_task(void const* pvParameters)
+static void h_uart_process_rx_task(void *pvParameters)
 {
 	interface_buffer_handle_t buf_handle_l = {0};
 	interface_buffer_handle_t *buf_handle = NULL;
@@ -448,7 +448,7 @@ static int is_valid_uart_rx_packet(uint8_t *rxbuff_a, uint16_t *len_a, uint16_t 
 
 static uint8_t * uart_scratch_buf = NULL;
 
-static void h_uart_read_task(void const* pvParameters)
+static void h_uart_read_task(void *pvParameters)
 {
 	struct esp_payload_header *header = NULL;
 	uint16_t len = 0, offset = 0;
@@ -580,19 +580,19 @@ void *bus_init_internal(void)
 	}
 
 	if (h_thread_create("uart_process_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_process_rx_task, NULL, &h_uart_process_rx_task_info) != H_OK) {
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, h_uart_process_rx_task, NULL, &h_uart_process_rx_task_info) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create uart_process_rx thread");
 		goto init_cleanup;
 	}
 
 	if (h_thread_create("uart_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_read_task, NULL, &h_uart_read_task_info) != H_OK) {
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, h_uart_read_task, NULL, &h_uart_read_task_info) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create uart_rx thread");
 		goto init_cleanup;
 	}
 
 	if (h_thread_create("uart_tx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, h_uart_write_task, NULL, &h_uart_write_task_info) != H_OK) {
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, h_uart_write_task, NULL, &h_uart_write_task_info) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create uart_tx thread");
 		goto init_cleanup;
 	}
@@ -732,7 +732,7 @@ int ensure_slave_bus_ready(void *bus_handle)
 	if (!esp_hosted_woke_from_power_save()) {
 		/* Reset the slave */
 		ESP_LOGI(TAG, "Resetting slave on UART bus with pin %d", reset_pin.pin);
-		h_gpio_config(reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
+		h_gpio_config(reset_pin.pin, H_GPIO_MODE_OUTPUT);
 		h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
 		h_msleep(10);
 		h_gpio_write(reset_pin.pin, H_RESET_VAL_INACTIVE);

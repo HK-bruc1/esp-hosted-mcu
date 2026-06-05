@@ -90,6 +90,7 @@
 
 #include "mempool.h"
 #include "transport_util.h"
+#include "h_transport_drv.h"
 #include "h_wrapper.h"
 
 static const char TAG[] = "H_SDIO_DRV";
@@ -183,10 +184,10 @@ static void * sdio_read_thread;
 static void * sdio_process_rx_thread;
 static void * sdio_write_thread;
 
-static queue_handle_t to_slave_queue[MAX_PRIORITY_QUEUES];
-semaphore_handle_t sem_to_slave_queue;
-static queue_handle_t from_slave_queue[MAX_PRIORITY_QUEUES];
-semaphore_handle_t sem_from_slave_queue;
+static h_queue_t to_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_to_slave_queue;
+static h_queue_t from_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_from_slave_queue;
 
 /* Counter to hold the amount of buffers already sent to sdio slave */
 static uint32_t sdio_tx_buf_count = 0;
@@ -225,16 +226,16 @@ static double_buf_t double_buf = {
 };
 
 // sem to trigger sdio_data_to_rx_buf_task()
-static semaphore_handle_t sem_double_buf_xfer_data;
+static h_semaphore_t sem_double_buf_xfer_data;
 
 static void * sdio_rx_buf_thread;
-static void sdio_data_to_rx_buf_task(void const* pvParameters);
+static void sdio_data_to_rx_buf_task(void *pvParameters);
 
 static int sdio_generate_slave_intr(uint8_t intr_no);
 
-static void sdio_write_task(void const* pvParameters);
-static void sdio_read_task(void const* pvParameters);
-static void sdio_process_rx_task(void const* pvParameters);
+static void sdio_write_task(void *pvParameters);
+static void sdio_read_task(void *pvParameters);
+static void sdio_process_rx_task(void *pvParameters);
 
 static inline void sdio_mempool_create(int tx_q_size, int rx_q_size)
 {
@@ -245,7 +246,7 @@ static inline void sdio_mempool_create(int tx_q_size, int rx_q_size)
 		// allocate enough blocks to handle full RX and possible peak tx requests
 		.num_blocks = rx_q_size + MIN_MEMPOOL_REQ,
 		.block_size = MAX_SDIO_BUFFER_SIZE,
-		.alignment_in_bytes = HOSTED_MEM_ALIGNMENT_64,
+		.alignment_in_bytes = H_MEM_ALIGNMENT_64,
 		.malloc = transport_util_malloc,
 		.calloc = transport_util_calloc,
 		.memset = h_memset_fn,
@@ -265,7 +266,7 @@ static inline void sdio_mempool_destroy(void)
 #endif
 }
 
-static inline void *sdio_buffer_alloc(uint need_memset)
+static inline void *sdio_buffer_alloc(uint32_t need_memset)
 {
 	MEMPOOL_ALLOC(buf_mp_g, MAX_SDIO_BUFFER_SIZE, need_memset);
 }
@@ -545,9 +546,9 @@ static int sdio_is_write_buffer_available(uint32_t buf_needed)
 
 				if (!max_retry_sdio_not_responding) {
 					ESP_LOGE(TAG, "%s: SDIO slave unresponsive", __func__);
-					h_event_post(ESP_HOSTED_EVENT,
+					h_event_post(H_EVENT_HOSTED,
 							ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-							NULL, 0, H_BLOCK_MAX);
+							NULL, 0);
 #if H_TRANSPORT_RESTART_ON_FAILURE
 					h_restart_host();
 #endif
@@ -582,7 +583,7 @@ static int sdio_is_write_buffer_available(uint32_t buf_needed)
 	return BUFFER_AVAILABLE;
 }
 
-static void sdio_write_task(void const* pvParameters)
+static void sdio_write_task(void *pvParameters)
 {
 	uint16_t len = 0;
 	uint8_t *sendbuf = NULL;
@@ -743,9 +744,9 @@ static void sdio_write_task(void const* pvParameters)
 				} else {
 					SDIO_DRV_UNLOCK();
 					ESP_LOGE(TAG, "Unrecoverable host sdio state");
-					h_event_post(ESP_HOSTED_EVENT,
+					h_event_post(H_EVENT_HOSTED,
 							ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-							NULL, 0, H_BLOCK_MAX);
+							NULL, 0);
 #if H_TRANSPORT_RESTART_ON_FAILURE
 					h_restart_host();
 #endif
@@ -948,7 +949,7 @@ static uint8_t * sdio_rx_get_buffer(uint32_t len)
 			// free already allocated memory
 			h_free_align(*buf);
 		}
-		*buf = (uint8_t *)h_malloc_align(len, HOSTED_MEM_ALIGNMENT_64);
+		*buf = (uint8_t *)h_malloc_align(len, H_MEM_ALIGNMENT_64);
 		assert(*buf);
 		double_buf.buffer[index].buf_size = len;
 		ESP_LOGD(TAG, "buf %d size: %ld", index, double_buf.buffer[index].buf_size);
@@ -1024,7 +1025,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 #endif
 
 // double buffer task to transfer data from the current buffer to the queue
-static void sdio_data_to_rx_buf_task(void const* pvParameters)
+static void sdio_data_to_rx_buf_task(void *pvParameters)
 {
 	uint8_t * buf;
 	uint32_t len;
@@ -1092,7 +1093,7 @@ static esp_err_t create_static_netif(void)
 }
 #endif
 
-static void sdio_read_task(void const* pvParameters)
+static void sdio_read_task(void *pvParameters)
 {
 	esp_err_t res = ESP_OK;
 	uint8_t *rxbuff = NULL;
@@ -1124,7 +1125,7 @@ static void sdio_read_task(void const* pvParameters)
 
 #if DO_COMBINED_REG_READ
     if (!reg_buf) {
-	    reg_buf = h_malloc_align(REG_BUF_LEN, HOSTED_MEM_ALIGNMENT_64);
+	    reg_buf = h_malloc_align(REG_BUF_LEN, H_MEM_ALIGNMENT_64);
 	    assert(reg_buf);
     }
 #endif
@@ -1161,9 +1162,9 @@ static void sdio_read_task(void const* pvParameters)
 			ESP_LOGE(TAG, "failed to read registers");
 
 			SDIO_DRV_UNLOCK();
-			h_event_post(ESP_HOSTED_EVENT,
+			h_event_post(H_EVENT_HOSTED,
 					ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-					NULL, 0, H_BLOCK_MAX);
+					NULL, 0);
 #if H_TRANSPORT_RESTART_ON_FAILURE
 			ESP_LOGI(TAG, "Host is resetting itself, to avoid any sdio race condition");
 			h_restart_host();
@@ -1179,9 +1180,9 @@ static void sdio_read_task(void const* pvParameters)
 			ESP_LOGE(TAG, "failed to read interrupt register");
 
 			SDIO_DRV_UNLOCK();
-			h_event_post(ESP_HOSTED_EVENT,
+			h_event_post(H_EVENT_HOSTED,
 					ESP_HOSTED_EVENT_TRANSPORT_FAILURE,
-					NULL, 0, H_BLOCK_MAX);
+					NULL, 0);
 #if H_TRANSPORT_RESTART_ON_FAILURE
 			ESP_LOGI(TAG, "Host is resetting itself, to avoid any sdio race condition");
 			h_restart_host();
@@ -1213,7 +1214,7 @@ static void sdio_read_task(void const* pvParameters)
 		 * actual written bytes till requested size from host
 		 * This typically improves throughput for larger packet sizes
 		 **/
-		len_from_slave = MAX_TRANSPORT_BUFFER_SIZE;
+		len_from_slave = H_MAX_TRANSPORT_BUFFER_SIZE;
 #else
 		/* check the length to be read */
 #if DO_COMBINED_REG_READ
@@ -1291,7 +1292,7 @@ static void sdio_read_task(void const* pvParameters)
 	}
 }
 
-static void sdio_process_rx_task(void const* pvParameters)
+static void sdio_process_rx_task(void *pvParameters)
 {
 	interface_buffer_handle_t buf_handle_l = {0};
 	interface_buffer_handle_t *buf_handle = NULL;
@@ -1483,28 +1484,28 @@ void *bus_init_internal(void)
 	}
 
 	if (h_thread_create("sdio_rx_buf",
-		DFLT_TASK_PRIO, RX_BUF_TASK_STACK_SIZE, sdio_data_to_rx_buf_task, NULL,
+		H_DEFAULT_TASK_PRIO, RX_BUF_TASK_STACK_SIZE, sdio_data_to_rx_buf_task, NULL,
 		&sdio_rx_buf_thread) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create sdio_rx_buf thread");
 		goto init_cleanup;
 	}
 
 	if (h_thread_create("sdio_read",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_read_task, NULL,
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, sdio_read_task, NULL,
 		&sdio_read_thread) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create sdio_read thread");
 		goto init_cleanup;
 	}
 
 	if (h_thread_create("sdio_process_rx",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_process_rx_task, NULL,
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, sdio_process_rx_task, NULL,
 		&sdio_process_rx_thread) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create sdio_process_rx thread");
 		goto init_cleanup;
 	}
 
 	if (h_thread_create("sdio_write",
-		DFLT_TASK_PRIO, DFLT_TASK_STACK_SIZE, sdio_write_task, NULL,
+		H_DEFAULT_TASK_PRIO, H_DEFAULT_TASK_STACK, sdio_write_task, NULL,
 		&sdio_write_thread) != H_OK) {
 		ESP_LOGE(TAG, "Failed to create sdio_write thread");
 		goto init_cleanup;
@@ -1610,7 +1611,7 @@ static esp_err_t transport_card_init(void *bus_handle, uint32_t timeout_ms)
 
 static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 {
-	h_gpio_config(reset_pin.pin, H_GPIO_MODE_DEF_OUTPUT);
+	h_gpio_config(reset_pin.pin, H_GPIO_MODE_OUTPUT);
 	h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
 	h_msleep(10);
 	h_gpio_write(reset_pin.pin, H_RESET_VAL_INACTIVE);

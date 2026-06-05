@@ -70,15 +70,44 @@
 #define H_DEFAULT_RPC_TASK_STACK  (5*1024)
 
 /* ── Common GPIO / misc (was in port_esp_hosted_host_os.h / host_config.h) ── */
+#ifdef H_ENABLE
+#undef H_ENABLE
+#endif
+#ifdef H_DISABLE
+#undef H_DISABLE
+#endif
+#ifdef H_GPIO_MODE_INPUT
+#undef H_GPIO_MODE_INPUT
+#endif
+#ifdef H_GPIO_MODE_OUTPUT
+#undef H_GPIO_MODE_OUTPUT
+#endif
+#ifdef H_GPIO_PULL_UP
+#undef H_GPIO_PULL_UP
+#endif
+#ifdef H_GPIO_PULL_DOWN
+#undef H_GPIO_PULL_DOWN
+#endif
+#ifdef ESP_HOSTED_SDIO_UNRESPONSIVE_CODE
+#undef ESP_HOSTED_SDIO_UNRESPONSIVE_CODE
+#endif
 #define H_ENABLE   1
 #define H_DISABLE  0
 #define H_GPIO_MODE_INPUT    1
+#define H_GPIO_MODE_OUTPUT   2
 #define H_GPIO_PULL_UP       1
 #define H_GPIO_PULL_DOWN     0
+#define ESP_HOSTED_SDIO_UNRESPONSIVE_CODE 0x107
+#ifdef H_GPIO_PIN_RESET
+#undef H_GPIO_PIN_RESET
+#endif
 #ifdef CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE
   #define H_GPIO_PIN_RESET   CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE
 #else
   #define H_GPIO_PIN_RESET   (-1)
+#endif
+#ifdef H_GPIO_PORT_RESET
+#undef H_GPIO_PORT_RESET
 #endif
 #define H_GPIO_PORT_RESET  NULL
 
@@ -94,6 +123,18 @@
 #endif
 
 /* ── Host Power-Save Kconfig mappings (was in port_esp_hosted_host_config.h) ── */
+#ifdef H_HOST_PS_ALLOWED
+#undef H_HOST_PS_ALLOWED
+#endif
+#ifdef H_HOST_WAKEUP_GPIO
+#undef H_HOST_WAKEUP_GPIO
+#endif
+#ifdef H_HOST_WAKEUP_GPIO_PORT
+#undef H_HOST_WAKEUP_GPIO_PORT
+#endif
+#ifdef H_HOST_WAKEUP_GPIO_LEVEL
+#undef H_HOST_WAKEUP_GPIO_LEVEL
+#endif
 #ifdef CONFIG_ESP_HOSTED_HOST_POWER_SAVE_ENABLED
   #define H_HOST_PS_ALLOWED  1
   #define H_HOST_WAKEUP_GPIO  CONFIG_ESP_HOSTED_HOST_WAKEUP_GPIO
@@ -138,6 +179,12 @@
 #endif
 
 /* ── Transport config ── */
+#ifdef H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD
+#undef H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD
+#endif
+#ifdef H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD
+#undef H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD
+#endif
 #ifdef CONFIG_HOST_TO_ESP_WIFI_DATA_THROTTLE
   #define H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD        CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_LOW_THRESHOLD
   #define H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD       CONFIG_ESP_HOSTED_TO_WIFI_DATA_THROTTLE_HIGH_THRESHOLD
@@ -146,7 +193,22 @@
   #define H_WIFI_TX_DATA_THROTTLE_HIGH_THRESHOLD       0
 #endif
 
+#ifdef H_TEST_RAW_TP
+#undef H_TEST_RAW_TP
+#endif
+#ifdef H_RAW_TP_REPORT_INTERVAL
+#undef H_RAW_TP_REPORT_INTERVAL
+#endif
+#ifdef H_RAW_TP_PKT_LEN
+#undef H_RAW_TP_PKT_LEN
+#endif
+#ifdef H_TEST_RAW_TP_DIR
+#undef H_TEST_RAW_TP_DIR
+#endif
 #if CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TRANSPORT
+  #define H_TEST_RAW_TP  1
+  #define H_RAW_TP_REPORT_INTERVAL  CONFIG_ESP_HOSTED_RAW_TP_REPORT_INTERVAL
+  #define H_RAW_TP_PKT_LEN          CONFIG_ESP_HOSTED_RAW_TP_HOST_TO_ESP_PKT_LEN
   #if CONFIG_ESP_HOSTED_RAW_THROUGHPUT_TX_TO_SLAVE
     #define H_TEST_RAW_TP_DIR 0x04  /* ESP_TEST_RAW_TP__HOST_TO_ESP */
   #elif CONFIG_ESP_HOSTED_RAW_THROUGHPUT_RX_FROM_SLAVE
@@ -157,7 +219,45 @@
     #define H_TEST_RAW_TP_DIR 0
   #endif
 #else
+  #define H_TEST_RAW_TP  0
+  #define H_RAW_TP_REPORT_INTERVAL  0
+  #define H_RAW_TP_PKT_LEN          0
   #define H_TEST_RAW_TP_DIR 0
+#endif
+
+#ifdef ESP_PKT_STATS
+#undef ESP_PKT_STATS
+#endif
+#ifdef ESP_PKT_STATS_REPORT_INTERVAL
+#undef ESP_PKT_STATS_REPORT_INTERVAL
+#endif
+#ifdef CONFIG_ESP_HOSTED_PKT_STATS
+  #define ESP_PKT_STATS  1
+  #define ESP_PKT_STATS_REPORT_INTERVAL  CONFIG_ESP_HOSTED_PKT_STATS_INTERVAL_SEC
+#else
+  #define ESP_PKT_STATS  0
+  #define ESP_PKT_STATS_REPORT_INTERVAL  0
+#endif
+
+#ifdef H_MEM_MONITOR
+#undef H_MEM_MONITOR
+#endif
+#ifdef CONFIG_ESP_HOSTED_MEM_MONITOR
+  #define H_MEM_MONITOR  1
+#else
+  #define H_MEM_MONITOR  0
+#endif
+
+#ifndef H_MEM_STATS
+  #define H_MEM_STATS  0
+#endif
+
+#ifndef CONFIG_H_LOWER_MEMCOPY
+  #define CONFIG_H_LOWER_MEMCOPY  0
+#endif
+
+#ifndef H_SEC_TO_MILLISEC
+  #define H_SEC_TO_MILLISEC(x)  (1000U * (x))
 #endif
 
 #endif /* H_PORT_CONFIG_ESPIDF_H */
