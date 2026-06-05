@@ -1,6 +1,6 @@
 if(CONFIG_ESP_HOSTED_ENABLED)
 	message(STATUS "Using Hosted Wi-Fi")
-	set(FG_root_dir ".")
+	set(FG_root_dir "${CMAKE_CURRENT_LIST_DIR}")
 	set(host_dir "${FG_root_dir}/host")
 	set(core_src_dir "${host_dir}/core/src")
 
