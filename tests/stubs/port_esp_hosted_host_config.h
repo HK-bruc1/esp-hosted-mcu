@@ -130,8 +130,6 @@ enum {
 /* For non-ESP host, pick a default slave target */
 #define H_SLAVE_TARGET_ESP32C6 1
 
-#define ESP_PLATFORM 0
-
 /* minimal forward declarations */
 typedef int esp_err_t;
 

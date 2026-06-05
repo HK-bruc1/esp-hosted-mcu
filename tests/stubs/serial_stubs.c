@@ -2,6 +2,7 @@
  * (moved from host/core/src/h_rpc_slave_if.c to host/port/esp-idf/) in mock builds. */
 #include <stdint.h>
 #include <stddef.h>
+#include "h_types.h"
 #include "h_control_serial_adapter.h"
 
 struct serial_handle_s;
@@ -26,20 +27,21 @@ static struct h_control_serial_handle { int dummy; } g_mock_handle;
 
 h_control_serial_handle_t *h_control_serial_drv_open(const char *transport)
 {
-    (void)transport;
+    if (!transport) return NULL;
     return (h_control_serial_handle_t *)&g_mock_handle;
 }
 
 int h_control_serial_drv_close(h_control_serial_handle_t **handle)
 {
-    if (handle) *handle = NULL;
+    if (!handle) return H_ERR_INVALID_ARG;
+    *handle = NULL;
     return 0;
 }
 
 int h_control_serial_drv_write(h_control_serial_handle_t *h,
                                 uint8_t *buf, int in_count, int *out_count)
 {
-    (void)h;
+    if (!h) return H_ERR_INVALID_ARG;
     if (buf) { /* caller owns buf; mock just consumes it */ }
     if (out_count) *out_count = in_count;
     return 0;

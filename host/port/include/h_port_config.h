@@ -7,7 +7,7 @@
 #ifndef H_PORT_CONFIG_H
 #define H_PORT_CONFIG_H
 
-#if defined(ESP_PLATFORM) && __has_include_next("h_port_config.h")
+#if ESP_PLATFORM && __has_include_next("h_port_config.h")
 #include_next "h_port_config.h"
 #define H_PORT_CONFIG_FROM_PORT 1
 #endif
