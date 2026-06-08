@@ -7,7 +7,7 @@
 #include <string.h>
 #include "esp_log.h"
 
-#include "port_esp_hosted_host_config.h"
+#include "h_port_config.h"
 #include "esp_hosted_transport_config.h"
 
 static const char *TAG = "esp_hosted_transport_config";

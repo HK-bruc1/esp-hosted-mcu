@@ -12,8 +12,6 @@ extern "C" {
 #include "esp_hosted_transport_config.h"
 #include "esp_hosted_api_priv.h"
 #include "esp_hosted_wifi_remote_glue.h"
-#include "port_esp_hosted_host_wifi_config.h"
-#include "port_esp_hosted_host_openthread.h"
 #include "h_port_config.h"
 #include "esp_hosted_misc.h"
 #include "esp_check.h"

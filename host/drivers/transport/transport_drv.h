@@ -21,18 +21,8 @@ extern "C" {
 #include "esp_hosted_interface.h"
 #include "esp_hosted_header.h"
 
-#include "port_esp_hosted_host_config.h"
+#include "h_port_config.h"
 #include "mempool.h"
-
-#if H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
-#include "port_esp_hosted_host_spi.h"
-#elif H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO
-#include "port_esp_hosted_host_sdio.h"
-#elif H_TRANSPORT_IN_USE == H_TRANSPORT_SPI_HD
-#include "port_esp_hosted_host_spi_hd.h"
-#elif H_TRANSPORT_IN_USE == H_TRANSPORT_UART
-#include "port_esp_hosted_host_uart.h"
-#endif
 
 /* ESP in sdkconfig has CONFIG_IDF_FIRMWARE_CHIP_ID entry.
  * supported values of CONFIG_IDF_FIRMWARE_CHIP_ID are - */

@@ -13,6 +13,8 @@
 #include <esp_netif.h>          /* IP_EVENT */
 #include "esp_hosted_event.h"
 
+ESP_EVENT_DEFINE_BASE(ESP_HOSTED_EVENT);
+
 /* ──  Helpers ── */
 
 /* Map h_err_t <-> esp_err_t */

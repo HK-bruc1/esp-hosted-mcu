@@ -113,31 +113,6 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		list(APPEND srcs "${host_dir}/drivers/transport/uart/uart_drv.c")
 	endif()
 
-	# Legacy port files — provide hosted_sdio_*/hosted_spi_*/etc. implementations
-	# called from the new h_transport_*.c adapters and from g_h.funcs vtable.
-	# These are active adapter files, marked for eventual retirement when
-	# the legacy implementations are consolidated into host/port/esp-idf/.
-	list(APPEND priv_include "${host_dir}/port/esp/freertos/include")
-
-	list(APPEND srcs
-		"${host_dir}/port/esp/freertos/src/port_esp_hosted_host_os.c"
-		#"${host_dir}/port/esp/freertos/src/port_esp_hosted_host_ota.c"
-		"${host_dir}/port/esp/freertos/src/port_esp_hosted_host_transport_defaults.c"
-	)
-
-	if(CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp/freertos/src/port_esp_hosted_host_sdio.c")
-	elseif(CONFIG_ESP_HOSTED_SPI_HD_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp/freertos/src/port_esp_hosted_host_spi_hd.c")
-	elseif(CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp/freertos/src/port_esp_hosted_host_spi.c")
-	elseif(CONFIG_ESP_HOSTED_UART_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp/freertos/src/port_esp_hosted_host_uart.c")
-	endif()
-	# OpenThread utility functions
-	if(CONFIG_ESP_HOSTED_OT_HOST_ENABLE)
-		list(APPEND srcs "${host_dir}/port/esp/freertos/src/port_esp_hosted_host_ot_util.c")
-	endif()
 
 	# new portable port layer (host/port/esp-idf)
 	list(APPEND srcs
@@ -146,18 +121,25 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		"${host_dir}/port/esp-idf/h_event.c"
 		"${host_dir}/port/esp-idf/h_wifi_type_adapt.c"
 		"${host_dir}/port/esp-idf/h_control_serial_adapter.c"
+		"${host_dir}/port/esp-idf/h_transport_gpio.c"
+		"${host_dir}/port/esp-idf/h_transport_defaults.c"
+		"${host_dir}/port/esp-idf/h_transport_common.c"
 	)
 
 	if(CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE)
 		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_sdio.c")
+		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_sdio_bus.c")
 	elseif(CONFIG_ESP_HOSTED_SPI_HD_HOST_INTERFACE)
 		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi_hd.c")
+		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi_hd_bus.c")
 	elseif(CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE)
 		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi.c")
+		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi_bus.c")
 	elseif(CONFIG_ESP_HOSTED_UART_HOST_INTERFACE)
 		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_uart.c")
+		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_uart_bus.c")
 	endif()
-endif()
+	endif()
 
 if(EXISTS "${IDF_PATH}/components/esp_driver_sdio")
     message(STATUS "Using new driver components (IDF >= 5.0)")
@@ -165,7 +147,7 @@ if(EXISTS "${IDF_PATH}/components/esp_driver_sdio")
 else()
     message(STATUS "Using legacy driver component (IDF <= 4.4)")
     list(APPEND driver_requires driver)
-endif()
+	endif()
 
 ### to support ESP-Hosted events, make esp_event a public requirement
 list(APPEND driver_requires esp_event)
@@ -180,7 +162,7 @@ idf_component_set_property(${COMPONENT_NAME} WHOLE_ARCHIVE TRUE)
 
 if(CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE)
 	idf_component_optional_requires(PRIVATE sdmmc)
-endif()
+	endif()
 
 # Required if using ESP-IDF without commit 6b6065de509b5de39e4655fd425bf96f43b365f7:
 # fix(driver_spi): fix p4 cache auto writeback during spi(dma) rx
@@ -204,4 +186,4 @@ if(CONFIG_ESP_HOSTED_NETWORK_SPLIT_ENABLED)
             target_compile_options(${lwip} PRIVATE "-include" "${CMAKE_CURRENT_SOURCE_DIR}/common/esp_hosted_lwip_src_port_hook.h")
     	endif()
     endif()
-endif()
+	endif()

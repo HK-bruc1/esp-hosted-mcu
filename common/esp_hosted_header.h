@@ -39,6 +39,8 @@ struct esp_payload_header {
 #define FLAG_POWER_SAVE_STARTED                   (1 << 2)
 #define FLAG_POWER_SAVE_STOPPED                   (1 << 3)
 
+#ifndef H_ESP_PAYLOAD_HEADER_OFFSET
 #define H_ESP_PAYLOAD_HEADER_OFFSET sizeof(struct esp_payload_header)
+#endif
 
 #endif

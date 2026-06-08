@@ -13,8 +13,7 @@
 #include <string.h>
 #include "transport_drv.h"
 #include "rpc_slave_if.h"
-#include "port_esp_hosted_host_log.h"
-#include "port_esp_hosted_host_config.h"
+#include "h_port_config.h"
 
 #ifndef BIT
 #define BIT(n) (1UL << (n))
@@ -64,23 +63,6 @@ typedef struct q_element {
     int buf_len;
 } esp_queue_elem_t;
 
-//g_h.funcs->_h_memcpy(DsT.data, SrC, len_to_cp);
-
-#if 0
-#define RPC_REQ_COPY_BYTES(DsT,SrC,SizE) {                                   \
-  if (SizE && SrC) {                                                          \
-    DsT.data = (uint8_t *) g_h.funcs->_h_calloc(1, SizE);                     \
-    if (!DsT.data) {                                                          \
-      hosted_log("Failed to allocate memory for req.%s\n",#DsT);              \
-      failure_status = RPC_ERR_MEMORY_FAILURE;                               \
-      goto fail_req;                                                          \
-    }                                                                         \
-    buff_to_free[num_buff_to_free++] = (uint8_t*)DsT.data;                    \
-    g_h.funcs->_h_memcpy(DsT.data, SrC, SizE);                                \
-    DsT.len = SizE;                                                           \
-  }                                                                           \
-}
-#endif
 #define RPC_REQ_COPY_BYTES(DsT,SrC,SizE) {                                    \
   if (SizE && SrC) {                                                          \
 	DsT.data = SrC;                                                           \

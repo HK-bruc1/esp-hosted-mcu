@@ -11,8 +11,7 @@
  */
 
 #include "esp_hosted_api_priv.h"
-#include "port_esp_hosted_host_config.h"
-#include "port_esp_hosted_host_wifi_config.h"
+#include "h_port_config.h"
 
 #if H_DPP_SUPPORT
 #include "esp_dpp.h"

@@ -85,7 +85,10 @@
 #include "esp_hosted_power_save.h"
 #include "esp_hosted_transport_config.h"
 #include "esp_hosted_bt.h"
-#include "port_esp_hosted_host_config.h"
+#include "h_port_config.h"
+#include "esp_event.h"
+#include "esp_netif.h"
+#include "esp_wifi_default.h"
 #include "esp_hosted_event.h"
 
 #include "mempool.h"
@@ -1347,12 +1350,16 @@ static void sdio_process_rx_task(void *pvParameters)
 						copy_payload, copy_payload, buf_handle->payload_len);
 				// only free memory when using older versions of wifi-remote
 #ifndef ESP_WIFI_REMOTE_VERSION // not defined in older versions of wifi-remote
-				if (unlikely(ret))
-					h_free(copy_payload); copy_payload = NULL;
+				if (unlikely(ret)) {
+					h_free(copy_payload);
+					copy_payload = NULL;
+				}
 #else
 #if ESP_WIFI_REMOTE_VERSION < ESP_WIFI_REMOTE_VERSION_VAL(1,3,1)
-				if (unlikely(ret))
-					h_free(copy_payload); copy_payload = NULL;
+				if (unlikely(ret)) {
+					h_free(copy_payload);
+					copy_payload = NULL;
+				}
 #else
 				(void)ret; // to silence 'unused variable' warning
 #endif

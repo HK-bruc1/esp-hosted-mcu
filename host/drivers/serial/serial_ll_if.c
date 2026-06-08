@@ -12,10 +12,12 @@
 #include "h_wrapper.h"
 
 /* MAX_PAYLOAD_SIZE = transport buffer minus hosted header */
+#ifndef MAX_PAYLOAD_SIZE
 #define MAX_PAYLOAD_SIZE  (H_MAX_TRANSPORT_BUFFER_SIZE - H_ESP_PAYLOAD_HEADER_OFFSET)
+#endif
 #include "esp_hosted_transport.h"
 #include "esp_hosted_header.h"
-#include "port_esp_hosted_host_log.h"
+#include "esp_log.h"
 #include "esp_hosted_log.h"
 
 DEFINE_LOG_TAG(serial_ll);

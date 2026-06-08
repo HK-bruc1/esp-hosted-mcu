@@ -22,6 +22,7 @@ extern "C" {
 #include "esp_hosted_interface.h"
 #include "esp_hosted_header.h"
 #include "mempool.h"
+#include "transport_drv_api.h"
 
 /* ESP in sdkconfig has CONFIG_IDF_FIRMWARE_CHIP_ID entry.
  * supported values of CONFIG_IDF_FIRMWARE_CHIP_ID are - */
@@ -147,16 +148,8 @@ uint8_t is_transport_tx_ready(void);
 
 #define MAX_RETRY_TRANSPORT_ACTIVE 100
 
-
-int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
-		uint8_t *payload_buf, uint16_t payload_len, uint8_t buff_zerocopy,
-		uint8_t *buffer_to_free, void (*free_buf_func)(void *ptr), uint8_t flags);
-
 int serial_rx_handler(interface_buffer_handle_t * buf_handle);
 void set_transport_state(uint8_t state);
-
-int ensure_slave_bus_ready(void *bus_handle);
-void check_if_max_freq_used(uint8_t chip_type);
 
 int bus_inform_slave_host_power_save_start(void);
 int bus_inform_slave_host_power_save_stop(void);

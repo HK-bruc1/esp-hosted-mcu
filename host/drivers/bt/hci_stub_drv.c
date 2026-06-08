@@ -15,7 +15,7 @@ static const char TAG[] = "hci_stub_drv";
 #endif
 
 #include "esp_hosted_bt.h"
-#include "port_esp_hosted_host_os.h"
+#include "h_port_config.h"
 
 #if H_BT_HOST_ESP_BLUEDROID
 #include "esp_hosted_bluedroid.h"

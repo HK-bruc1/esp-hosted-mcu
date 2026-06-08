@@ -15,9 +15,7 @@
 #include "esp_wifi_types.h"
 #include "esp_hosted_misc.h"
 #include "esp_hosted_misc_types.h"
-#include "port_esp_hosted_host_config.h"
-#include "port_esp_hosted_host_wifi_config.h"
-
+#include "h_port_config.h"
 #if H_WIFI_ENTERPRISE_SUPPORT
 #include "esp_eap_client.h"
 #endif
@@ -680,7 +678,7 @@ typedef int (*rpc_evt_cb_t) (ctrl_cmd_t * event);
  *   1. allocated buffer within library are saved in `app_resp->app_free_buff_hdl`
  *   Please use `app_resp->app_free_buff_func` for freeing them.
  *   2. Response `ctrl_cmd_t *app_resp` is also allocated from library,
- *   need to free using g_h.funcs->_h_free() function.
+ *   need to free using h_free() function.
  **/
 
 /* Set control event callback

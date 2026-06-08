@@ -8,7 +8,8 @@
 #include <string.h>
 #include "serial_if.h"
 #include "h_wrapper.h"
-#include "port_esp_hosted_host_log.h"
+#include "h_port_config.h"
+#include "esp_log.h"
 
 /* Control serial adapter (Path B — port adapter, not a contract)
  * Defined in host/port/esp-idf/h_control_serial_adapter.c */

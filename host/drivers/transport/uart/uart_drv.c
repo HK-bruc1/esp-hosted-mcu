@@ -18,7 +18,9 @@
 #include "esp_hosted_transport_config.h"
 #include "power_save_drv.h"
 #include "esp_hosted_bt.h"
-#include "port_esp_hosted_host_os.h"
+#include "h_port_config.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include "h_wrapper.h"
 
 #include "mempool.h"
@@ -307,12 +309,16 @@ static void h_uart_process_rx_task(void *pvParameters)
 				ret = chan_arr[buf_handle->if_type]->rx(chan_arr[buf_handle->if_type]->api_chan,
 						copy_payload, copy_payload, buf_handle->payload_len);
 #ifndef ESP_WIFI_REMOTE_VERSION // not defined in older versions of wifi-remote
-				if (unlikely(ret))
-					h_free(copy_payload); copy_payload = NULL;
+				if (unlikely(ret)) {
+					h_free(copy_payload);
+					copy_payload = NULL;
+				}
 #else
 #if ESP_WIFI_REMOTE_VERSION < ESP_WIFI_REMOTE_VERSION_VAL(1,3,1)
-				if (unlikely(ret))
-					h_free(copy_payload); copy_payload = NULL;
+				if (unlikely(ret)) {
+					h_free(copy_payload);
+					copy_payload = NULL;
+				}
 #else
 				(void)ret; // to silence 'unused variable' warning
 #endif
