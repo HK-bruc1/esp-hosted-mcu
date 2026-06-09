@@ -9,7 +9,6 @@
 #include <stdbool.h>
 
 #include "esp_hosted_transport.h"
-#include "esp_hosted_os_abstraction.h"
 #include "h_transport_drv.h"
 #include "h_wrapper.h"
 #include "hci_drv.h"

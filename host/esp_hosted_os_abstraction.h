@@ -2,6 +2,14 @@
  * SPDX-FileCopyrightText: 2015-2026 Espressif Systems (Shanghai) CO LTD
  * SPDX-License-Identifier: Apache-2.0
  */
+/*
+ * Deprecated legacy OS abstraction header.
+ * New host ports must implement host/port/include/h_port_contract.h
+ * and use host/port/include/h_wrapper.h instead.
+ * This header is retained only for backward compatibility with
+ * external code that directly includes it.
+ */
+
 #ifndef __ESP_HOSTED_OS_ABSTRACTION_H__
 #define __ESP_HOSTED_OS_ABSTRACTION_H__
 

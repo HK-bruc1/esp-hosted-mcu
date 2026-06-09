@@ -1,7 +1,7 @@
 # Current Platform Active Path Matrix
 
 > WP 0 of `23.ESP32平台完全解耦与移植友好型收尾方案.md`
-> Date: 2026-06-05
+> Date: 2026-06-05 (baseline), refreshed 2026-06-09 (post-24)
 > Control plane closure path: **B (current-platform adapter closure)**
 
 ## 1. Classification Key
@@ -207,3 +207,59 @@ All 5 consumer files now use new headers exclusively. The following were migrate
 - "跨平台 contract 充分性已经被真实平台证明"
 - "所有 legacy 文件已经删除"
 - "ESP32 / ESP-IDF host active source set 已完全解耦" (until WP 1-6 complete)
+
+## 10. Post-24 Best-Practice Residuals (2026-06-09)
+
+Legacy migration (document 24) is complete. The WP 1-6 items from document 23 are done. The following are **residual items** for future best-practice cleanup — they are NOT blocking and do NOT affect runtime behavior.
+
+### 10a. `esp_hosted_os_abstraction.h` includes in active/public scope
+
+These files still `#include "esp_hosted_os_abstraction.h"`. They do **not** use `g_h.funcs` / `->_h_` / `H_DEFLT_FREE_FUNC` / `HOSTED_FREE` / `HOSTED_CALLOC` at runtime — the include is purely a header dependency residual.
+
+| File | Include line | Runtime legacy calls |
+|---|---|---|
+| `host/esp_hosted.h` | L14 | 0 — umbrella header, public API surface |
+| `host/drivers/transport/transport_util.h` | L10 | 0 — public header |
+| `host/core/src/h_transport_util.c` | L8 | 0 — core file, already 12/12 isolated |
+| `host/api/src/esp_hosted_ota_api.c` | L10 | 0 — API file |
+| `host/drivers/bt/vhci_drv.c` | L12 | 0 — confirmed clean (conditional-active) |
+| `host/port/esp-idf/tools/stats.c` | L15 | 0 — confirmed clean |
+| `host/drivers/transport/transport_util.c` | L7 | 0 — legacy non-active transport util |
+
+Also includes legacy-only files (not in active path):
+- `host/drivers/rpc/core/rpc_utils.c` (L10)
+- `host/drivers/rpc/core/rpc_rsp.c` (L17)
+- `host/drivers/rpc/core/rpc_req.c` (L15)
+- `host/drivers/rpc/core/rpc_evt.c` (L16)
+- `host/port/esp/freertos/include/port_esp_hosted_host_os.h` (L22)
+
+**Cleanup path**: Document 25 WP 1 replaces these includes with `h_types.h` / `h_port_config.h` / `h_transport_drv.h` as appropriate. The file `esp_hosted_os_abstraction.h` itself is retained as a deprecated compatibility header.
+
+### 10b. CMake hardcoding of `host/port/esp-idf/*.c` in root CMakeLists.txt
+
+Root `CMakeLists.txt` lists each `host/port/esp-idf/*.c` file individually (lines 119-140) rather than using a glob or port-selector pattern. This is functional but means adding a new port adapter requires editing the root CMakeLists.txt.
+
+**Affected lines** (root `CMakeLists.txt`):
+- L119: `port_init.c`
+- L120: `h_osal.c`
+- L121: `h_event.c`
+- L122: `h_wifi_type_adapt.c`
+- L123: `h_control_serial_adapter.c`
+- L124: `h_transport_gpio.c`
+- L125: `h_transport_defaults.c`
+- L126: `h_transport_common.c`
+- L130-131: `h_transport_sdio.c`, `h_transport_sdio_bus.c`
+- L133-134: `h_transport_spi_hd.c`, `h_transport_spi_hd_bus.c`
+- L136-137: `h_transport_spi.c`, `h_transport_spi_bus.c`
+- L139-140: `h_transport_uart.c`, `h_transport_uart_bus.c`
+
+**Cleanup path**: Document 25 WP 4 introduces a port-selector CMake skeleton that auto-discovers port source files.
+
+### 10c. Verification Summary (2026-06-09)
+
+| Check | Result |
+|---|---|
+| `rg 'g_h\.funcs\|->_h_\|HOSTED_FREE\|HOSTED_CALLOC\|H_DEFLT_FREE_FUNC'` across active source set | **0 hits** |
+| `vhci_drv.c` runtime legacy calls | 0 (confirmed) |
+| `power_save_drv.c` runtime legacy calls | 0 (confirmed) |
+| `stats.c` runtime legacy calls | 0 (confirmed) |

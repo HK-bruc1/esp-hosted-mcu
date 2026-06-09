@@ -1,8 +1,14 @@
+set(FG_root_dir "${CMAKE_CURRENT_LIST_DIR}")
+set(host_dir "${FG_root_dir}/host")
+set(core_src_dir "${host_dir}/core/src")
+
+# Host port selector. Keep this outside CONFIG_ESP_HOSTED_ENABLED so ESP-IDF
+# can resolve port-specific REQUIRES/PRIV_REQUIRES during dependency expansion.
+set(ESP_HOSTED_HOST_PORT "esp-idf" CACHE STRING "ESP-Hosted host port implementation")
+include("${host_dir}/port/${ESP_HOSTED_HOST_PORT}/port.cmake")
+
 if(CONFIG_ESP_HOSTED_ENABLED)
 	message(STATUS "Using Hosted Wi-Fi")
-	set(FG_root_dir "${CMAKE_CURRENT_LIST_DIR}")
-	set(host_dir "${FG_root_dir}/host")
-	set(core_src_dir "${host_dir}/core/src")
 
 	set(srcs
 		"${host_dir}/api/src/esp_wifi_weak.c"
@@ -15,8 +21,7 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		"${core_src_dir}/h_serial_if.c"
 		"${core_src_dir}/h_transport_drv.c"
 		"${core_src_dir}/h_transport_util.c"
-		"${host_dir}/drivers/serial/serial_ll_if.c"
-		"${host_dir}/port/esp-idf/tools/stats.c")
+		"${host_dir}/drivers/serial/serial_ll_if.c")
 
 	# only these directories are public. Others are private
 	set(pub_include
@@ -32,9 +37,6 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 		"${host_dir}/drivers/serial"
 		"${host_dir}/core/include/h_internal"
 		"${host_dir}/core/include/h_public"
-		"${host_dir}/port/esp-idf"
-		"${host_dir}/port/include"
-		"${host_dir}/port/esp-idf/tools"
 		"${host_dir}/api/priv")
 
 	# rpc files - wrap -> slaveif -> core
@@ -114,31 +116,8 @@ if(CONFIG_ESP_HOSTED_ENABLED)
 	endif()
 
 
-	# new portable port layer (host/port/esp-idf)
-	list(APPEND srcs
-		"${host_dir}/port/esp-idf/port_init.c"
-		"${host_dir}/port/esp-idf/h_osal.c"
-		"${host_dir}/port/esp-idf/h_event.c"
-		"${host_dir}/port/esp-idf/h_wifi_type_adapt.c"
-		"${host_dir}/port/esp-idf/h_control_serial_adapter.c"
-		"${host_dir}/port/esp-idf/h_transport_gpio.c"
-		"${host_dir}/port/esp-idf/h_transport_defaults.c"
-		"${host_dir}/port/esp-idf/h_transport_common.c"
-	)
-
-	if(CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_sdio.c")
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_sdio_bus.c")
-	elseif(CONFIG_ESP_HOSTED_SPI_HD_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi_hd.c")
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi_hd_bus.c")
-	elseif(CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi.c")
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_spi_bus.c")
-	elseif(CONFIG_ESP_HOSTED_UART_HOST_INTERFACE)
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_uart.c")
-		list(APPEND srcs "${host_dir}/port/esp-idf/h_transport_uart_bus.c")
-	endif()
+	list(APPEND srcs ${ESP_HOSTED_PORT_SRCS})
+	list(APPEND priv_include ${ESP_HOSTED_PORT_PRIV_INCLUDE_DIRS})
 	endif()
 
 if(EXISTS "${IDF_PATH}/components/esp_driver_sdio")
@@ -150,10 +129,10 @@ else()
 	endif()
 
 ### to support ESP-Hosted events, make esp_event a public requirement
-list(APPEND driver_requires esp_event)
+list(APPEND driver_requires esp_event ${ESP_HOSTED_PORT_REQUIRES})
 
 idf_component_register(SRCS ${srcs}
-	PRIV_REQUIRES soc esp_netif esp_timer driver esp_wifi bt esp_http_client console wpa_supplicant openthread
+	PRIV_REQUIRES ${ESP_HOSTED_PORT_PRIV_REQUIRES}
 	REQUIRES ${driver_requires}
 	INCLUDE_DIRS ${pub_include}
 	PRIV_INCLUDE_DIRS ${priv_include})

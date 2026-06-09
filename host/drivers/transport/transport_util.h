@@ -7,7 +7,7 @@
 #ifndef __SLAVE_UTIL_H__
 #define __SLAVE_UTIL_H__
 
-#include "esp_hosted_os_abstraction.h"
+#include "h_wrapper.h"
 #include "mempool.h"
 
 #if H_USE_MEMPOOL

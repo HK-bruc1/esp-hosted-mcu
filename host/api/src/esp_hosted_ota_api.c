@@ -7,7 +7,6 @@
 #include "esp_hosted.h"
 #include "esp_log.h"
 #include "rpc_wrap.h"
-#include "esp_hosted_os_abstraction.h"
 #include "h_wrapper.h"
 
 static const char* TAG = "esp_hosted_ota";

@@ -5,7 +5,6 @@
  */
 
 #include "h_wrapper.h"
-#include "esp_hosted_os_abstraction.h"
 #include "transport_util.h"
 #include <stdlib.h>
 

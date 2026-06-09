@@ -12,7 +12,6 @@
 #endif
 #include "esp_log.h"
 #include "esp_hosted_transport_init.h"
-#include "esp_hosted_os_abstraction.h"
 #include "h_port_config.h"
 #include "h_wrapper.h"
 
