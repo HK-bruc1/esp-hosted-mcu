@@ -168,6 +168,7 @@ static inline void spi_hd_buffer_free(void *buf)
 	MEMPOOL_FREE(buf_mp_g, buf);
 }
 
+#if H_SPI_HD_DATA_READY_ENABLED
 /*
  * This ISR is called when the data_ready line goes high.
  */
@@ -176,6 +177,7 @@ static void FAST_RAM_ATTR gpio_dr_isr_handler(void* arg)
 	ESP_EARLY_LOGD(TAG, "gpio_dr_isr_handler");
 	h_sem_give_from_isr(spi_hd_data_ready_sem, NULL);
 }
+#endif
 
 static int spi_hd_get_tx_buffer_num(uint32_t *tx_num, bool is_lock_needed)
 {
@@ -545,9 +547,14 @@ static void spi_hd_read_task(void *pvParameters)
 	}
 
 	ESP_LOGD(TAG, "Open Data path");
+#if H_SPI_HD_DATA_READY_ENABLED
 	// slave is ready: initialise Data Ready as interrupt input
 	h_gpio_set_intr(H_SPI_HD_PIN_DATA_READY,
 			H_SPI_HD_DR_INTR_EDGE, gpio_dr_isr_handler, NULL);
+	ESP_LOGI(TAG, "DATA_READY interrupt configured");
+#else
+	ESP_LOGI(TAG, "DATA_READY disabled, polling every %d ms", H_SPI_HD_POLL_INTERVAL_MS);
+#endif
 
 	// tell slave to open data path
 	data = SPI_HD_CTRL_DATAPATH_ON;
@@ -556,8 +563,18 @@ static void spi_hd_read_task(void *pvParameters)
 	ESP_LOGD(TAG, "spi_hd_read_task: post open data path");
 	// we are now ready to receive data from slave
 	while (1) {
-		// wait for read semaphore to trigger
+#if H_SPI_HD_DATA_READY_ENABLED
+		// wait for data ready interrupt
 		h_sem_take(spi_hd_data_ready_sem, H_BLOCK_MAX);
+#else
+		if (!H_SPI_HD_POLL_INTERVAL_MS) {
+			// yield to give other threads a chance to run before we poll for Rx data
+			h_msleep(0);
+		}
+		// poll mode: wake periodically and check TX_BUF_LEN
+		h_sem_take(spi_hd_data_ready_sem,
+				H_SPI_HD_POLL_INTERVAL_MS);
+#endif
 		ESP_LOGV(TAG, "spi_hd_read_task: data ready intr received");
 
 		SPI_HD_DRV_LOCK();

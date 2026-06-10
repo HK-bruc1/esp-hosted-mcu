@@ -1,4 +1,4 @@
-# OpenThread Support
+# OpenThread and Zigbee Support
 
 **Table of Contents**
 
@@ -6,28 +6,33 @@
 
 - [1. Introduction](#1-introduction)
   - [1.1 Prerequisites](#11-prerequisites)
-	- [1.1.1 Basic OpenThread](#111-basic-openthread)
-	- [1.1.2 Operating as an OpenThread Border Router](#112-operating-as-an-openthread-border-router)
+	- [1.1.1 Basic OpenThread / Zigbee Operation](#111-basic-openthread--zigbee-operation)
+	- [1.1.2 Operating as an OpenThread Border Router / Zigbee Gateway](#112-operating-as-an-openthread-border-router--zigbee-gateway)
 - [2. Configuration](#2-configuration)
-  - [2.1 OpenThread RCP Configuration on the Co-processor](#21-openthread-rcp-configuration-on-the-co-processor)
+  - [2.1 RCP Configuration on the Co-processor](#21-rcp-configuration-on-the-co-processor)
   - [2.2 OpenThread Configuration on the Host](#22-openthread-configuration-on-the-host)
 	- [2.2.1 Initialising the OpenThread Connection from the Host Application](#221-initialising-the-openthread-connection-from-the-host-application)
+  - [2.3 Zigbee Configuration on the Host](#23-zigbee-configuration-on-the-host)
+    - [2.3.1 Initialising the Zigbee Connection from the Host Application](#231-initialising-the-zigbee-connection-from-the-host-application)
 - [3. More Information](#3-more-information)
 
 </details>
 
 ## 1. Introduction
 
-OpenThread is an IP stack running on the 802.15.4 MAC layer which features mesh network and low power consumption.
+OpenThread is an IP stack which features mesh network and low power consumption. Zigbee is a low-power, wireless mesh networking protocol designed for IoT devices. Both operate on the 802.15.4 standard.
 
-ESP-Hosted supports OpenThread by running the OpenThread Host on the Host Processor and the OpenThread RCP (Radio Co-Processor) on the co-processor. The diagram below shows how the OpenThread Host and RCP communicate.
+ESP-Hosted runs the OpenThread or Zigbee Host stack on the Host Processor and the RCP (Radio Co-Processor) on the co-processor. The RCP is common and can operate with either OpenThread or Zigbee Host stacks.
+
+The diagram below shows how the OpenThread Host and RCP communicate.
+
 
 ```
     +------------+                                      +------------+
     |            |         ESP-Hosted Transport         |            |
-    | OpenThread |<------------------------------------>| OpenThread | (Example: ESP32-C6)
-    | Host       |                                      | RCP        |
-    |            |                                      |            |
+    | OpenThread |<------------------------------------>|    RCP     | (Example: ESP32-C6)
+    | / Zigbee   |                                      |            |
+    | Host       |                                      |            |
     |            |                 UART                 |            |
     |            |<------------------------------------>|            |
     |            |                                      |            |
@@ -36,49 +41,51 @@ ESP-Hosted supports OpenThread by running the OpenThread Host on the Host Proces
 
 > [!NOTE]
 > Currently a dedicated UART channel is required to pass OpenThread data between the Host and RCP. OpenThread over the current ESP-Hosted Transport to be supported in the future.
+>
+> Zigbee only supports using a dedicated UART channel for communication.
 
 ### 1.1 Prerequisites
 
-#### 1.1.1 Basic OpenThread
+#### 1.1.1 Basic OpenThread / Zigbee Operation
 
-The co-processor must support OpenThread RCP operation.
+The co-processor must support OpenThread / Zigbee RCP operation.
 
-Example co-processors that support OpenThread RCP include the ESP32-H2, ESP32-C5 and ESP32-C6.
+Example co-processors that support RCP include the ESP32-H2, ESP32-C5 and ESP32-C6.
 
-#### 1.1.2 Operating as an OpenThread Border Router
+#### 1.1.2 Operating as an OpenThread Border Router / Zigbee Gateway
 
-The co-processor must support OpenThread RCP operation and Wi-Fi to operate as part of an OpenThread Border Router, which passes OpenThread packets between the OpenThread and Wi-Fi networks.
+The co-processor must support RCP operation and Wi-Fi to operate as part of an OpenThread Border Router or Zigbee Gateway, which passes packets between the OpenThread / Zigbee and Wi-Fi networks.
 
-Example co-processors as RCPs that support OpenThread Border Router operation include the ESP32-C5 and ESP32-C6.
+Example co-processors as RCPs that support OpenThread Border Router / Zigbee Gateway operation include the ESP32-C5 and ESP32-C6.
 
-**Coexistence between OpenThread and Wi-Fi**
+**Coexistence between OpenThread / Zigbee and Wi-Fi**
 
-The co-processor has only one hardware radio, so Wi-Fi and OpenThread have to share the radio (coexistence). This may lead to performance issues or dropped packets if there is a lot of traffic on Wi-Fi and/or OpenThread.
+The co-processor has only one hardware radio, so Wi-Fi and OpenThread / Zigbee have to share the radio (coexistence). This may lead to performance issues or dropped packets if there is a lot of traffic on Wi-Fi and/or OpenThread. See this guide on [RF Coexistence](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c6/api-guides/coexist.html) for more information.
 
-An alternative option is to use two co-processors: one for Wi-Fi and one for OpenThread:
+The recommended option is to use two co-processors: one for Wi-Fi and one for OpenThread / Zigbee:
 
 ```
     +------------+
-    |            |         ESP-Hosted Transport         +------------+
-    | OpenThread |<------------------------------------>| Wi-Fi      | (Example: ESP32-C6)
-    | Border     |                                      +------------+
+    |            |         ESP-Hosted Transport         +-----------+
+    | OpenThread |<------------------------------------>|   Wi-Fi   | (Example: ESP32-C6)
+    | Border     |                                      +-----------+
     | Router     |
-    | Host       |                 UART                 +------------+
-    |            |<------------------------------------>| OpenThread | (Example: ESP32-H2)
-    |            |                                      | RCP        |
-    +------------+                                      +------------+
+    | / Zigbee   |                 UART                 +-----------+
+    | Gateway    |<------------------------------------>|    RCP    | (Example: ESP32-H2)
+    |            |                                      +-----------+
+    +------------+
 ```
 
-Here, OpenThread is operating independent of ESP-Hosted. Since there are now two hardware radios, coexistence is not required.
+Here, OpenThread / Zigbee is operating independent of ESP-Hosted. Since there are now two hardware radios, coexistence is not required.
 
-More information on this mode of operation for the ESP32-P4 can be found in the [ESP-IDF OpenThread Border Router Example for ESP32-P4](https://github.com/espressif/esp-thread-br/blob/main/examples/basic_thread_border_router/README_esp32p4.md).
+More information on this mode of operation for the ESP32-P4 can be found in the [ESP-IDF OpenThread Border Router Example for ESP32-P4](https://github.com/espressif/esp-thread-br/blob/main/examples/basic_thread_border_router/README_esp32p4.md) or the [Zigbee SDK Gateway Example](https://github.com/espressif/esp-zigbee-sdk/tree/main/examples/zigbee_gateway).
 
 ## 2. Configuration
 
-### 2.1 OpenThread RCP Configuration on the Co-processor
+### 2.1 RCP Configuration on the Co-processor
 
 > [!NOTE]
-> This section targets the ESP32-C6 as the RCP. The same configuration is required when using other supported co-processors as the OpenThread RCP.
+> This section targets the ESP32-C6 as the RCP. The same configuration is required when using other supported co-processors as the RCP.
 
 In the ESP-Hosted project `slave` directory:
 
@@ -119,7 +126,7 @@ Example Configuration
         └── (configure UART parameters)
 ```
 
-If you did not edit `sdkconfig.defaults.esp32c6` to enable OpenThread (above), modify these settings first:
+If you did not edit `sdkconfig.defaults.esp32c6` to enable OpenThread (above), modify these settings instead:
 
 ```
 Component config
@@ -143,7 +150,7 @@ Component config
         └── [ ] Enable dynamic log level control
 ```
 
-You can now build the co-processor as an OpenThread RCP.
+You can now build the co-processor as an RCP.
 
 ### 2.2 OpenThread Configuration on the Host
 
@@ -202,8 +209,28 @@ esp_hosted_openthread_get_radio_config(&hosted_radio_config);
 
 See the ESP-Hosted OpenThread examples for more information.
 
+### 2.3 Zigbee Configuration on the Host
+
+> [!NOTE]
+> This section targets the ESP32-P4 as the Zigbee Host.
+
+> [!IMPORTANT]
+> Zigbee support has been tested using ESP-IDF 5.5.4.
+
+ESP-Hosted includes the following example:
+
+- [Home Automation thermostat on a Zigbee Coordinator](https://github.com/espressif/esp-hosted-mcu/tree/main/examples/host_zigbee_thermostat)
+
+See the ESP Zigbee SDK for a [Zigbee Gateway Example](https://github.com/espressif/esp-zigbee-sdk/tree/main/examples/zigbee_gateway). Further Zigbee examples can be found in the [ESP Zigbee SDK](https://github.com/espressif/esp-zigbee-sdk/).
+
+### 2.3.1 Initialising the Zigbee Connection from the Host Application
+
+Initialising the ESP-Hosted interface and setting the Zigbee radio configuration is similar to setting up under OpenThread. See [Section 2.2.1 above](#221-initialising-the-openthread-connection-from-the-host-application)
+
 ## 3. More Information
 
 - [ESP-IDF OpenThread documentation](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/openthread.html)
 - [ESP-IDF Coexistence Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32c6/api-guides/coexist.html)
 - [ESP-IDF OpenThread Border Router Example for ESP32-P4 with two co-processors](https://github.com/espressif/esp-thread-br/blob/main/examples/basic_thread_border_router/README_esp32p4.md)
+- [ESP Zigbee SDK Programming Guide](https://docs.espressif.com/projects/esp-zigbee-sdk/en/latest/esp32/index.html)
+- [ESP Zigbee SDK](https://github.com/espressif/esp-zigbee-sdk/)
