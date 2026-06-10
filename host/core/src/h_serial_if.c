@@ -9,9 +9,9 @@
 #include <string.h>
 #include <inttypes.h>
 
-/* Control serial adapter (Path B — port adapter, not a contract)
- * Defined in host/port/esp-idf/h_control_serial_adapter.c */
-#include "h_control_serial_adapter.h"
+/* Control serial adapter contract — platform-neutral declarations.
+ * ESP-IDF implementation in host/port/esp-idf/h_control_serial_adapter.c */
+#include "h_control_serial_contract.h"
 
 static void *g_serial_handle = NULL;
 

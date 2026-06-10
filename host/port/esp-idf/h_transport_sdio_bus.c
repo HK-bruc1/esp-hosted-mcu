@@ -23,6 +23,9 @@
 
 #include "sdio_reg.h"
 #include "esp_hosted_transport_config.h"
+/* Transition: reuse shared types/macros (transport_channel_t, chan_arr[],
+ * buffer size constants) from legacy transport_drv.h. Can be removed
+ * when ESP-IDF port is fully self-contained. */
 #include "transport_drv.h"
 
 #if H_SDIO_PWR_CTRL_LDO

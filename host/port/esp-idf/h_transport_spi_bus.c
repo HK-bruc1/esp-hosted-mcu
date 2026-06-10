@@ -12,6 +12,8 @@
 #include <esp_check.h>
 #include <esp_log.h>
 
+/* Transition: reuse shared types/macros from legacy transport_drv.h.
+ * Can be removed when ESP-IDF port is fully self-contained. */
 #include "transport_drv.h"
 
 #define TAG "h_spi_bus"

@@ -7,7 +7,11 @@
 #ifndef _ESP_HOSTED_CLI_H_
 #define _ESP_HOSTED_CLI_H_
 
+#if defined(__has_include)
+#if __has_include("sdkconfig.h")
 #include "sdkconfig.h"
+#endif
+#endif
 
 /* host */
 #ifdef CONFIG_ESP_HOSTED_ENABLED

@@ -13,6 +13,8 @@
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 
+/* Transition: reuse shared types/macros from legacy transport_drv.h.
+ * Can be removed when ESP-IDF port is fully self-contained. */
 #include "transport_drv.h"
 
 #define TAG "h_uart_bus"

@@ -1194,7 +1194,7 @@ int rpc_core_stop(void)
 
 /* ── Phase 1: h_rpc_send_request ──
  * Synchronous buffer-based RPC dispatch.
- * Bridges to legacy transport_pserial_* via h_serial_if abstraction.
+ * Bridges to h_serial_if abstraction (serial adapter contract).
  * Full request/response tracking (UID matching, async callbacks) is handled
  * by the legacy rpc_send_req() path; this function provides the new
  * contract-layer entry point for direct buffer exchange. */

@@ -9,11 +9,9 @@
 #include "serial_if.h"
 #include "h_wrapper.h"
 #include "h_port_config.h"
-#include "esp_log.h"
-
-/* Control serial adapter (Path B — port adapter, not a contract)
- * Defined in host/port/esp-idf/h_control_serial_adapter.c */
-#include "h_control_serial_adapter.h"
+/* Control serial adapter contract — platform-neutral declarations.
+ * ESP-IDF implementation in host/port/esp-idf/h_control_serial_adapter.c */
+#include "h_control_serial_contract.h"
 
 DEFINE_LOG_TAG(serial_if);
 
@@ -97,20 +95,20 @@ uint8_t parse_tlv(uint8_t* data, uint32_t* pro_len)
 					*pro_len = val_len;
 					return SUCCESS;
 				} else {
-					ESP_LOGE(TAG, "Data Type not matched, exp %d, recvd %d\n",
+					H_LOGE(TAG, "Data Type not matched, exp %d, recvd %d\n",
 							PROTO_PSER_TLV_T_DATA, data[len]);
 				}
 			} else {
-				ESP_LOGE(TAG, "Endpoint Name not matched, exp [%s] or [%s], recvd [%s]\n",
+				H_LOGE(TAG, "Endpoint Name not matched, exp [%s] or [%s], recvd [%s]\n",
 						ep_name, ep_name2, (char* )&data[len]);
 			}
 		} else {
-			ESP_LOGE(TAG, "Endpoint length not matched, exp [For %s, %lu OR For %s, %lu], recvd %d\n",
+			H_LOGE(TAG, "Endpoint length not matched, exp [For %s, %lu OR For %s, %lu], recvd %d\n",
 					ep_name, (long unsigned int)(strlen(ep_name)),
 					ep_name2, (long unsigned int)(strlen(ep_name2)), val_len);
 		}
 	} else {
-		ESP_LOGE(TAG, "Endpoint type not matched, exp %d, recvd %d\n",
+		H_LOGE(TAG, "Endpoint type not matched, exp %d, recvd %d\n",
 				PROTO_PSER_TLV_T_EPNAME, data[len]);
 	}
 	return FAILURE;
@@ -122,13 +120,13 @@ int transport_pserial_close(void)
 
 	ret = h_control_serial_platform_deinit();
 	if (ret != SUCCESS) {
-		ESP_LOGE(TAG, "Platform deinit failed\n");
+		H_LOGE(TAG, "Platform deinit failed\n");
 	}
 
 	ret = h_control_serial_drv_close(&serial_handle);
 
 	if (ret) {
-		ESP_LOGE(TAG, "Failed to close driver interface\n");
+		H_LOGE(TAG, "Failed to close driver interface\n");
 		return FAILURE;
 	}
 	serial_handle = NULL;
@@ -169,7 +167,7 @@ int transport_pserial_send(uint8_t* data, uint16_t data_length)
 	uint8_t *write_buf = NULL;
 
 	if (!data || !data_length) {
-		ESP_LOGW(TAG, "Empty RPC data, ignored");
+		H_LOGW(TAG, "Empty RPC data, ignored");
 		return FAILURE;
 	}
 
@@ -194,19 +192,19 @@ int transport_pserial_send(uint8_t* data, uint16_t data_length)
 	}
 
 	if (!serial_handle) {
-		ESP_LOGE(TAG, "Serial connection closed?\n");
+		H_LOGE(TAG, "Serial connection closed?\n");
 		goto free_bufs1;
 	}
 
 	count = compose_tlv(write_buf, data, data_length);
 	if (!count) {
-		ESP_LOGE(TAG, "Failed to compose TX data\n");
+		H_LOGE(TAG, "Failed to compose TX data\n");
 		goto free_bufs1;
 	}
 
 	ret = h_control_serial_drv_write(serial_handle, write_buf, count, &count);
 	if (ret != SUCCESS) {
-		ESP_LOGE(TAG, "Failed to write TX data\n");
+		H_LOGE(TAG, "Failed to write TX data\n");
 		goto free_bufs2;
 	}
 

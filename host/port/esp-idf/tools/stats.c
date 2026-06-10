@@ -8,6 +8,8 @@
 
 #include "stats.h"
 #if TEST_RAW_TP
+/* Transition: uses shared transport definitions via h_transport_drv.h.
+ * Can be removed when ESP-IDF port is fully self-contained. */
 #include "h_transport_drv.h"
 #endif
 #include "esp_log.h"
