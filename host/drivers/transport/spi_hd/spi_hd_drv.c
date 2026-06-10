@@ -265,7 +265,7 @@ static void spi_hd_write_task(void *pvParameters)
 
 /*
  * Write a packet to the SPI HD bus
- * Returns ESP_OK on success, ESP_FAIL on failure
+ * Returns H_OK on success, H_FAIL on failure
  */
 static int spi_hd_write_packet(interface_buffer_handle_t *buf_handle)
 {
@@ -277,23 +277,23 @@ static int spi_hd_write_packet(interface_buffer_handle_t *buf_handle)
 	int ret = 0;
 	uint32_t data_left;
 	uint32_t buf_needed;
-	int result = ESP_OK;
+	int result = H_OK;
 
 	if (unlikely(!buf_handle))
-		return ESP_FAIL;
+		return H_FAIL;
 
 	len = buf_handle->payload_len;
 
 	if (unlikely(!buf_handle->flag && !len)) {
 		ESP_LOGE(TAG, "%s: Empty len", __func__);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	if (!buf_handle->payload_zcopy) {
 		sendbuf = spi_hd_buffer_alloc(MEMSET_REQUIRED);
 		if (!sendbuf) {
 			ESP_LOGE(TAG, "spi_hd buff malloc failed");
-			return ESP_FAIL;
+			return H_FAIL;
 		}
 		free_func = spi_hd_buffer_free;
 	} else {
@@ -304,7 +304,7 @@ static int spi_hd_write_packet(interface_buffer_handle_t *buf_handle)
 	if (buf_handle->payload_len > MAX_SPI_HD_BUFFER_SIZE - sizeof(struct esp_payload_header)) {
 		ESP_LOGE(TAG, "Pkt len [%u] > Max [%u]. Drop",
 				buf_handle->payload_len, MAX_SPI_HD_BUFFER_SIZE - sizeof(struct esp_payload_header));
-		result = ESP_FAIL;
+		result = H_FAIL;
 		goto done;
 	}
 
@@ -348,7 +348,7 @@ static int spi_hd_write_packet(interface_buffer_handle_t *buf_handle)
 	ret = spi_hd_is_write_buffer_available(buf_needed);
 	if (ret != BUFFER_AVAILABLE) {
 		ESP_LOGW(TAG, "no SPI_HD write buffers on slave device, drop pkt");
-		result = ESP_FAIL;
+		result = H_FAIL;
 		goto unlock_done;
 	}
 
@@ -359,7 +359,7 @@ static int spi_hd_write_packet(interface_buffer_handle_t *buf_handle)
 	ret = h_spi_hd_write_dma(spi_hd_handle, sendbuf, data_left, ACQUIRE_LOCK);
 	if (ret) {
 		ESP_LOGE(TAG, "%s: Failed to send data", __func__);
-		result = ESP_FAIL;
+		result = H_FAIL;
 		goto unlock_done;
 	}
 
@@ -451,7 +451,7 @@ static int update_flow_ctrl(uint8_t *rxbuff)
 }
 
 // pushes received packet data on to rx queue
-static esp_err_t spi_hd_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
+static h_err_t spi_hd_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
 {
 	uint8_t pkt_prio = PRIO_Q_OTHERS;
 	struct esp_payload_header *h= NULL;
@@ -479,10 +479,10 @@ static esp_err_t spi_hd_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16
 	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 	h_sem_give(sem_from_slave_queue);
 
-	return ESP_OK;
+	return H_OK;
 }
 
-static esp_err_t spi_hd_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
+static h_err_t spi_hd_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 {
 	uint16_t len = 0;
 	uint16_t offset = 0;
@@ -491,7 +491,7 @@ static esp_err_t spi_hd_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		// detected and updated flow control
 		// no need to further process the packet
 		spi_hd_buffer_free(buf);
-		return ESP_OK;
+		return H_OK;
 	}
 
 	/* Drop packet if no processing needed */
@@ -504,16 +504,16 @@ static esp_err_t spi_hd_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		 * */
 		ESP_LOGE(TAG, "Dropping packet");
 		spi_hd_buffer_free(buf);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	if (spi_hd_push_pkt_to_queue(buf, len, offset)) {
 		ESP_LOGE(TAG, "Failed to push Rx packet to queue");
 		spi_hd_buffer_free(buf);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
-	return ESP_OK;
+	return H_OK;
 }
 
 static void spi_hd_read_task(void *pvParameters)
@@ -899,7 +899,7 @@ void bus_deinit_internal(void *bus_handle)
   *         buffer_to_free - buffer to be freed after tx
   *         free_buf_func - function used to free buffer_to_free
   *         flags - flags to set
-  * @retval int - ESP_OK or ESP_FAIL
+  * @retval int - H_OK or H_FAIL
   */
 int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		uint8_t *payload_buf, uint16_t payload_len, uint8_t buff_zcopy,
@@ -920,7 +920,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		ESP_LOGE(TAG, "tx fail: NULL buff, invalid len (%u) or len > max len (%u), transport_up(%u))",
 				payload_len, MAX_PAYLOAD_SIZE, transport_up);
 		H_FREE_PTR_WITH_FUNC(free_func, buffer_to_free);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	buf_handle.payload_zcopy = buff_zcopy;
@@ -945,7 +945,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		pkt_stats.sta_tx_in_pass++;
 #endif
 
-	return ESP_OK;
+	return H_OK;
 }
 
 void check_if_max_freq_used(uint8_t chip_type)
@@ -957,12 +957,12 @@ void check_if_max_freq_used(uint8_t chip_type)
 
 int ensure_slave_bus_ready(void *bus_handle)
 {
-	esp_err_t res = ESP_OK;
+	h_err_t res = H_OK;
 	gpio_pin_t reset_pin = { .port = H_GPIO_PORT_RESET, .pin = H_GPIO_PIN_RESET };
 
 	if (ESP_TRANSPORT_OK != esp_hosted_transport_get_reset_config(&reset_pin)) {
 		ESP_LOGE(TAG, "Unable to get RESET config for transport");
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	assert(reset_pin.pin != -1);
@@ -988,7 +988,7 @@ int ensure_slave_bus_ready(void *bus_handle)
 int bus_inform_slave_host_power_save_start(void)
 {
 	ESP_LOGI(TAG, "Inform slave, host power save is started");
-	int ret = ESP_OK;
+	int ret = H_OK;
 
 	/*
 	 * If the write thread is not started yet (which happens after receiving INIT event),
@@ -1021,7 +1021,7 @@ int bus_inform_slave_host_power_save_start(void)
 int bus_inform_slave_host_power_save_stop(void)
 {
 	ESP_LOGI(TAG, "Inform slave, host power save is stopped");
-	int ret = ESP_OK;
+	int ret = H_OK;
 
 	/*
 	 * If the write thread is not started yet (which happens after receiving INIT event),

@@ -111,6 +111,18 @@ typedef enum {
     } while (0)
 #endif
 
+/* ── Fatal Error (infinite-loop abort) ── */
+#ifndef H_FATAL
+#ifdef TEST_H_FATAL_HOOK
+#define H_FATAL(msg) TEST_H_FATAL_HOOK(msg)
+#else
+#define H_FATAL(msg) do {                                              \
+    g_h_osal.log_write(H_LOG_ERROR, "FATAL", "FATAL: %s", (msg));     \
+    while (1) { h_msleep(1000); }                                      \
+} while (0)
+#endif
+#endif
+
 /* ── Event ── */
 #define h_event_register(b, i, cb, ctx)  (g_h_event.register_handler(b, i, cb, ctx))
 #define h_event_unregister(b, i, cb)     (g_h_event.unregister_handler(b, i, cb))
@@ -144,6 +156,9 @@ typedef enum {
 #define h_uart_read(h, d, s)             (g_h_transport.uart_read(h, d, s))
 #define h_uart_write(h, d, s)            (g_h_transport.uart_write(h, d, s))
 #define h_uart_flush(h)                  (g_h_transport.uart_flush(h))
+
+#define h_post_transport_init_hook() \
+    do { if (g_h_transport.post_transport_init_hook) g_h_transport.post_transport_init_hook(); } while(0)
 
 #define h_gpio_config(pin, mode)         (g_h_transport.gpio_config(pin, mode))
 #define h_gpio_set_intr(pin, t, isr, a)  (g_h_transport.gpio_set_intr(pin, t, isr, a))

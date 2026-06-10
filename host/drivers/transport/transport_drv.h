@@ -14,7 +14,7 @@ extern "C" {
 
 /** Includes **/
 
-#include "esp_err.h"
+#include "h_types.h"
 
 #include "esp_hosted_transport.h"
 #include "esp_hosted_api_types.h"
@@ -105,8 +105,8 @@ extern volatile uint8_t wifi_tx_throttling;
 typedef int (*hosted_rxcb_t)(void *buffer, uint16_t len, void *free_buff_hdl);
 
 typedef void (transport_free_cb_t)(void* buffer);
-typedef esp_err_t (*transport_channel_tx_fn_t)(void *h, void *buffer, size_t len);
-typedef esp_err_t (*transport_channel_rx_fn_t)(void *h, void *buffer, void * buff_to_free, size_t len);
+typedef h_err_t (*transport_channel_tx_fn_t)(void *h, void *buffer, size_t len);
+typedef h_err_t (*transport_channel_rx_fn_t)(void *h, void *buffer, void * buff_to_free, size_t len);
 
 typedef struct {
 	void * api_chan;
@@ -118,13 +118,13 @@ typedef struct {
 } transport_channel_t;
 
 
-esp_err_t setup_transport(void(*esp_hosted_up_cb)(void));
-esp_err_t teardown_transport(void);
-esp_err_t transport_drv_reconfigure(void);
+h_err_t setup_transport(void(*esp_hosted_up_cb)(void));
+h_err_t teardown_transport(void);
+h_err_t transport_drv_reconfigure(void);
 transport_channel_t *transport_drv_add_channel(void *api_chan,
 		esp_hosted_if_type_t if_type, uint8_t secure,
 		transport_channel_tx_fn_t *tx, const transport_channel_rx_fn_t rx);
-esp_err_t transport_drv_remove_channel(transport_channel_t *channel);
+h_err_t transport_drv_remove_channel(transport_channel_t *channel);
 
 
 void *bus_init_internal(void);
@@ -132,7 +132,7 @@ void bus_deinit_internal(void *bus_handle);
 
 void process_priv_communication(interface_buffer_handle_t *buf_handle);
 
-esp_err_t send_slave_config(uint8_t host_cap, uint8_t firmware_chip_id,
+h_err_t send_slave_config(uint8_t host_cap, uint8_t firmware_chip_id,
 		uint8_t raw_tp_direction, uint8_t low_thr_thesh, uint8_t high_thr_thesh);
 
 uint8_t is_transport_rx_ready(void);

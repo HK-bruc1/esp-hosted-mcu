@@ -6,15 +6,16 @@
 
 /** Includes **/
 #include <inttypes.h>
-#include <assert.h>
 #include "h_wrapper.h"
 
 // REMOVED: esp_wifi.h
+/* esp_hosted_transport.h must precede h_config.h — the latter includes
+ * h_port_config.h which references ESP_TRANSPORT_*_MAX_BUF_SIZE defined here. */
+#include "esp_hosted_transport.h"
 #include "h_transport_drv.h"
 #include "h_config.h"
 #include "mempool.h"
 #include "transport_util.h"
-#include "esp_hosted_transport.h"
 #include "esp_hosted_transport_init.h"
 #include "esp_hosted_host_fw_ver.h"
 #include <errno.h>
@@ -119,11 +120,14 @@ void set_transport_state(uint8_t state)
 	transport_driver_event_handler(state);
 }
 
-static void transport_drv_init(void)
+static h_err_t transport_drv_init(void)
 {
-	h_transport_init(&bus_handle);
+	h_err_t err = h_transport_init(&bus_handle);
 	H_LOGD(TAG, "Bus handle: %p", bus_handle);
-	assert(bus_handle);
+	if (err != H_OK || !bus_handle) {
+		H_LOGE(TAG, "Bus handle init failed: %d", err);
+		return H_FAIL;
+	}
 #if H_NETWORK_SPLIT_ENABLED
 	H_LOGI(TAG, "Network split enabled. Port ranges- Host:TCP(%d-%d), UDP(%d-%d), Slave:TCP(%d-%d), UDP(%d-%d)",
 		H_HOST_TCP_LOCAL_PORT_RANGE_START, H_HOST_TCP_LOCAL_PORT_RANGE_END,
@@ -131,7 +135,8 @@ static void transport_drv_init(void)
 		H_SLAVE_TCP_REMOTE_PORT_RANGE_START, H_SLAVE_TCP_REMOTE_PORT_RANGE_END,
 		H_SLAVE_UDP_REMOTE_PORT_RANGE_START, H_SLAVE_UDP_REMOTE_PORT_RANGE_END);
 #endif
-	/* hci_drv_init() called by rpc_start() */
+	h_post_transport_init_hook();
+	return H_OK;
 }
 
 h_err_t teardown_transport(void)
@@ -159,10 +164,11 @@ h_err_t teardown_transport(void)
 
 h_err_t setup_transport(void(*esp_hosted_up_cb)(void))
 {
+	h_err_t err;
 	h_hosted_init_hook();
-	transport_drv_init();
+	err = transport_drv_init();
+	if (err != H_OK) return err;
 	transport_esp_hosted_up_cb = esp_hosted_up_cb;
-
 	return H_OK;
 }
 
@@ -255,7 +261,10 @@ h_err_t transport_drv_remove_channel(transport_channel_t *channel)
 		break;
 	}
 
-	assert(chan_arr[channel->if_type] == channel);
+	if (chan_arr[channel->if_type] != channel) {
+		H_LOGE(TAG, "Channel mismatch for IF[%u]", channel->if_type);
+		return H_FAIL;
+	}
 
 #if H_USE_MEMPOOL
 	transport_drv_common_mempool_destroy(channel->memp);
@@ -295,7 +304,10 @@ static hosted_mempool_t * transport_drv_common_mempool_create(void)
 				.free   = h_free_fn,
 		};
 		mempool_common = hosted_mempool_create(&config);
-		assert(mempool_common);
+		if (!mempool_common) {
+			H_LOGE(TAG, "Failed to create common mempool");
+			return NULL;
+		}
 	}
 
 	// increment ref count
@@ -368,10 +380,13 @@ static h_err_t transport_drv_sta_tx(void *h, void *buffer, size_t len)
 #endif
 	}
 
-	assert(h && h==chan_arr[ESP_STA_IF]->api_chan);
+	if (!h || h != chan_arr[ESP_STA_IF]->api_chan) {
+		H_LOGE(TAG, "STA TX: invalid channel handle");
+		return H_FAIL;
+	}
 
 	/*  Prepare transport buffer directly consumable */
-	copy_buff = mempool_alloc(chan_arr[ESP_STA_IF]->memp, 1600, true);
+	copy_buff = mempool_alloc(chan_arr[ESP_STA_IF]->memp, H_MAX_TRANSPORT_BUFFER_SIZE, true);
 	if (!copy_buff) {
 		H_LOGW(TAG, "STA TX: mempool_alloc failed, dropping pkt (len=%u)", len);
 #if defined(H_ERR_BUSY)
@@ -403,10 +418,13 @@ static h_err_t transport_drv_ap_tx(void *h, void *buffer, size_t len)
 #endif
 	}
 
-	assert(h && h==chan_arr[ESP_AP_IF]->api_chan);
+	if (!h || h != chan_arr[ESP_AP_IF]->api_chan) {
+		H_LOGE(TAG, "AP TX: invalid channel handle");
+		return H_FAIL;
+	}
 
 	/*  Prepare transport buffer directly consumable */
-	copy_buff = mempool_alloc(chan_arr[ESP_AP_IF]->memp, 1600, true);
+	copy_buff = mempool_alloc(chan_arr[ESP_AP_IF]->memp, H_MAX_TRANSPORT_BUFFER_SIZE, true);
 	if (!copy_buff) {
 		H_LOGW(TAG, "AP TX: mempool_alloc failed, dropping pkt (len=%u)", len);
 #if defined(H_ERR_BUSY)
@@ -434,7 +452,10 @@ h_err_t transport_drv_serial_tx(void *h, void *buffer, size_t len)
 		return H_ERR_NO_MEM;
 #endif
 	}
-	assert(h && h==chan_arr[ESP_SERIAL_IF]->api_chan);
+	if (!h || h != chan_arr[ESP_SERIAL_IF]->api_chan) {
+		H_LOGE(TAG, "Serial TX: invalid channel handle");
+		return H_FAIL;
+	}
 	return h_transmit(ESP_SERIAL_IF, 0, buffer, len, H_BUFF_NO_ZEROCOPY, buffer, transport_serial_free_cb, 0);
 }
 
@@ -446,7 +467,10 @@ transport_channel_t *transport_drv_add_channel(void *api_chan,
 	H_LOGD(TAG, "Adding channel IF[%u]: S[%u] Tx[%p] Rx[%p]", if_type, secure, tx, rx);
 	transport_channel_t *channel = NULL;
 
-	if (if_type >= ESP_MAX_IF) { H_LOGE(TAG, "Assertion failed: if_type >= ESP_MAX_IF"); }
+	if (if_type >= ESP_MAX_IF) {
+		H_LOGE(TAG, "Invalid if_type %d >= ESP_MAX_IF", if_type);
+		return NULL;
+	}
 
 	if (!tx || !rx) {
 		H_LOGE(TAG, "%s fail for IF[%u]: tx or rx is NULL", __func__, if_type );
@@ -467,7 +491,10 @@ transport_channel_t *transport_drv_add_channel(void *api_chan,
 
 
 	chan_arr[if_type] = h_calloc(sizeof(transport_channel_t), 1);
-	assert(chan_arr[if_type]);
+	if (!chan_arr[if_type]) {
+		H_LOGE(TAG, "Failed to allocate channel for IF[%u]", if_type);
+		return NULL;
+	}
 	channel = chan_arr[if_type];
 
 	switch (if_type) {
@@ -499,6 +526,12 @@ transport_channel_t *transport_drv_add_channel(void *api_chan,
 	/* Need to change size wrt transport */
 #if H_USE_MEMPOOL
 	channel->memp = transport_drv_common_mempool_create();
+	if (!channel->memp) {
+		H_LOGE(TAG, "Failed to create mempool for IF[%u]", if_type);
+		h_free(channel);
+		chan_arr[if_type] = NULL;
+		return NULL;
+	}
 #endif
 
 	H_LOGD(TAG, "Add ESP-Hosted channel IF[%u]: S[%u] Tx[%p] Rx[%p]",
@@ -612,7 +645,10 @@ static void process_event(uint8_t *evt_buf, uint16_t len)
 static h_err_t get_chip_str_from_id(int chip_id, char* chip_str)
 {
 	int ret = H_OK;
-	assert(chip_str);
+	if (!chip_str) {
+		H_LOGE(TAG, "chip_str is NULL");
+		return H_FAIL;
+	}
 
 	switch(chip_id) {
 	case ESP_PRIV_FIRMWARE_CHIP_ESP32:
@@ -690,7 +726,7 @@ static void verify_host_config_for_slave(uint8_t chip_type)
 		get_chip_str_from_id(exp_chip_id, exp_str);
 		H_LOGE(TAG, "Identified slave [%s] != Expected [%s]\n\t\trun 'idf.py menuconfig' at host to reselect the slave?\n\t\tAborting.. ", slave_str, exp_str);
 		h_msleep(10);
-		assert(0!=0);
+		H_FATAL("Slave chip mismatch — aborting");
 	} else {
 		H_LOGI(TAG, "Identified slave [%s]", slave_str);
 		check_if_max_freq_used(chip_type);
@@ -743,7 +779,10 @@ h_err_t send_slave_config(uint8_t host_cap, uint8_t firmware_chip_id,
 	uint8_t *sendbuf = NULL;
 
 	sendbuf = h_malloc_align(MEMPOOL_ALIGNED(256, 64), MEMPOOL_ALIGNMENT_BYTES);
-	assert(sendbuf);
+	if (!sendbuf) {
+		H_LOGE(TAG, "Failed to allocate send buffer");
+		return H_FAIL;
+	}
 
 	/* Populate event data */
 	//event = (struct esp_priv_event *) (sendbuf + sizeof(struct esp_payload_header)); //ZeroCopy
@@ -832,12 +871,12 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 
 	pos = evt_buf;
 	H_LOGD(TAG, "Init event length: %u", len);
-	if (len > 64) {
+	if (len >= 64) {
 		H_LOGE(TAG, "Init event length: %u", len);
 #if H_TRANSPORT_IN_USE == H_TRANSPORT_SPI
-		H_LOGE(TAG, "Seems incompatible SPI mode try changing SPI mode. Asserting for now.");
+		H_LOGE(TAG, "Seems incompatible SPI mode, try changing SPI mode");
 #endif
-		assert(len < 64);
+		return H_FAIL;
 	}
 
 	while (len_left) {
@@ -890,7 +929,7 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 
 			if (slave_sdio_mode && !host_sdio_mode) {
 				H_LOGE(TAG, "SDIO mode mismatch: slave is in streaming mode, but host is in packet mode. Aborting.");
-				assert(0);
+				H_FATAL("SDIO mode mismatch — aborting");
 			}
 #endif
 		} else {
@@ -960,7 +999,7 @@ static int process_init_event(uint8_t *evt_buf, uint16_t len)
 
 	transport_delayed_init();
 
-	return 0;
+	return H_OK;
 }
 
 int serial_rx_handler(interface_buffer_handle_t * buf_handle)

@@ -9,6 +9,7 @@
 #include "driver/gpio.h"
 #include "h_transport_gpio.h"
 #include "h_transport_uart_bus.h"
+#include "hci_drv.h"
 /* Transition: reuse shared types/macros from legacy transport_drv.h.
  * Can be removed when ESP-IDF port is fully self-contained. */
 #include "transport_drv.h"
@@ -138,6 +139,8 @@ const h_transport_contract_t g_h_transport = {
     /* netif — NULL for Phase 1 */
     .netif_create   = NULL,
     .netif_destroy  = NULL,
+
+    .post_transport_init_hook = hci_drv_init,
 };
 
 #endif /* H_TRANSPORT_IN_USE == H_TRANSPORT_UART */

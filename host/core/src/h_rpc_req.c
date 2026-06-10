@@ -15,8 +15,14 @@
 
 static const char *TAG = "rpc_req";
 
+/* Note: Overflow return H_FAIL may leak buffers already registered in
+ * app_req->rpc_free_buff_hdls[].  MAX_FREE_BUFF_HANDLES is sized to
+ * prevent this; full cleanup would need compose_rpc_req() refactoring. */
 #define ADD_RPC_BUFF_TO_FREE_LATER(BuFf) {                                      \
-	assert((app_req->n_rpc_free_buff_hdls+1)<=MAX_FREE_BUFF_HANDLES);           \
+	if ((app_req->n_rpc_free_buff_hdls+1) > MAX_FREE_BUFF_HANDLES) {            \
+		H_LOGE(TAG, "RPC free buff handle list full");                           \
+		return H_FAIL;                                                            \
+	}                                                                            \
 	app_req->rpc_free_buff_hdls[app_req->n_rpc_free_buff_hdls++] = BuFf;        \
 }
 

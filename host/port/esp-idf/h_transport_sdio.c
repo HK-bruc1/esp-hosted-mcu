@@ -13,6 +13,7 @@
 
 /* ──  SDIO bus helpers (from host/port/esp-idf/) ── */
 #include "h_transport_sdio_bus.h"
+#include "hci_drv.h"
 #include "transport_drv_api.h"
 
 
@@ -172,6 +173,8 @@ const h_transport_contract_t g_h_transport = {
     /* netif — NULL for Phase 1 */
     .netif_create   = NULL,
     .netif_destroy  = NULL,
+
+    .post_transport_init_hook = hci_drv_init,
 };
 
 #endif /* H_TRANSPORT_IN_USE == H_TRANSPORT_SDIO */

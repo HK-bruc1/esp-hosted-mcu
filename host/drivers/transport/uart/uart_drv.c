@@ -118,7 +118,7 @@ static inline void h_uart_buffer_free(void *buf)
 
 /*
  * Write a packet to the UART bus
- * Returns ESP_OK on success, ESP_FAIL on failure
+ * Returns H_OK on success, H_FAIL on failure
  */
 static int h_uart_write_packet(interface_buffer_handle_t *buf_handle)
 {
@@ -129,23 +129,23 @@ static int h_uart_write_packet(interface_buffer_handle_t *buf_handle)
 	struct esp_payload_header * payload_header = NULL;
 	int tx_len_to_send;
 	int tx_len;
-	int result = ESP_OK;
+	int result = H_OK;
 
 	if (unlikely(!buf_handle))
-		return ESP_FAIL;
+		return H_FAIL;
 
 	len = buf_handle->payload_len;
 
 	if (unlikely(!buf_handle->flag && !len)) {
 		ESP_LOGE(TAG, "%s: Empty len", __func__);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	if (!buf_handle->payload_zcopy) {
 		sendbuf = h_uart_buffer_alloc(MEMSET_REQUIRED);
 		if (!sendbuf) {
 			ESP_LOGE(TAG, "uart buff malloc failed");
-			return ESP_FAIL;
+			return H_FAIL;
 		}
 		free_func = h_uart_buffer_free;
 	} else {
@@ -156,7 +156,7 @@ static int h_uart_write_packet(interface_buffer_handle_t *buf_handle)
 	if (buf_handle->payload_len > MAX_UART_BUFFER_SIZE - sizeof(struct esp_payload_header)) {
 		ESP_LOGE(TAG, "Pkt len [%u] > Max [%u]. Drop",
 				buf_handle->payload_len, MAX_UART_BUFFER_SIZE - sizeof(struct esp_payload_header));
-		result = ESP_FAIL;
+		result = H_FAIL;
 		goto done;
 	}
 
@@ -196,7 +196,7 @@ static int h_uart_write_packet(interface_buffer_handle_t *buf_handle)
 	tx_len = h_uart_write(uart_handle, sendbuf, tx_len_to_send);
 	if (tx_len != tx_len_to_send) {
 		ESP_LOGE(TAG, "failed to send uart data");
-		result = ESP_FAIL;
+		result = H_FAIL;
 		goto done;
 	}
 
@@ -370,7 +370,7 @@ static void h_uart_process_rx_task(void *pvParameters)
 }
 
 // pushes received packet data on to rx queue
-static esp_err_t push_to_rx_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
+static h_err_t push_to_rx_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
 {
 	uint8_t pkt_prio = PRIO_Q_OTHERS;
 	struct esp_payload_header *h= NULL;
@@ -398,7 +398,7 @@ static esp_err_t push_to_rx_queue(uint8_t * rxbuff, uint16_t len, uint16_t offse
 	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 	h_sem_give(sem_from_slave_queue);
 
-	return ESP_OK;
+	return H_OK;
 }
 
 static int is_valid_uart_rx_packet(uint8_t *rxbuff_a, uint16_t *len_a, uint16_t *offset_a)
@@ -618,7 +618,7 @@ init_cleanup:
   *         buffer_to_free - buffer to be freed after tx
   *         free_buf_func - function used to free buffer_to_free
   *         flags - flags to set
-  * @retval int - ESP_OK or ESP_FAIL
+  * @retval int - H_OK or H_FAIL
   */
 int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		uint8_t *payload_buf, uint16_t payload_len, uint8_t buff_zcopy,
@@ -637,7 +637,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		ESP_LOGE(TAG, "tx fail: NULL buff, invalid len (%u) or len > max len (%u), transport_up(%u))",
 				payload_len, MAX_PAYLOAD_SIZE, transport_up);
 		H_FREE_PTR_WITH_FUNC(free_func, buffer_to_free);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	buf_handle.payload_zcopy = buff_zcopy;
@@ -662,7 +662,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		pkt_stats.sta_tx_in_pass++;
 #endif
 
-	return ESP_OK;
+	return H_OK;
 }
 
 void bus_deinit_internal(void *bus_handle)
@@ -723,12 +723,12 @@ void bus_deinit_internal(void *bus_handle)
 
 int ensure_slave_bus_ready(void *bus_handle)
 {
-	esp_err_t res = ESP_OK;
+	h_err_t res = H_OK;
 	gpio_pin_t reset_pin = { .port = H_GPIO_PORT_RESET, .pin = H_GPIO_PIN_RESET };
 
 	if (ESP_TRANSPORT_OK != esp_hosted_transport_get_reset_config(&reset_pin)) {
 		ESP_LOGE(TAG, "Unable to get RESET config for transport");
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	assert(reset_pin.pin != -1);
@@ -761,7 +761,7 @@ int ensure_slave_bus_ready(void *bus_handle)
 int bus_inform_slave_host_power_save_start(void)
 {
 	ESP_LOGI(TAG, "Inform slave, host power save is started");
-	int ret = ESP_OK;
+	int ret = H_OK;
 
 	/*
 	 * If the write thread is not started yet (which happens after receiving INIT event),
@@ -794,7 +794,7 @@ int bus_inform_slave_host_power_save_start(void)
 int bus_inform_slave_host_power_save_stop(void)
 {
 	ESP_LOGI(TAG, "Inform slave, host power save is stopped");
-	int ret = ESP_OK;
+	int ret = H_OK;
 
 
 	/*

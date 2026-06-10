@@ -55,7 +55,9 @@ static h_err_t rpc_iface_feature_control(rcp_feature_control_t *feature_control)
 static ctrl_cmd_t * RPC_DEFAULT_REQ(void)
 {
   ctrl_cmd_t *new_req = (ctrl_cmd_t*)h_calloc(1, sizeof(ctrl_cmd_t));
-  assert(new_req);
+  if (!new_req) {
+    H_FATAL("RPC_DEFAULT_REQ alloc failed");
+  }
   new_req->msg_type = RPC_TYPE__Req;
   new_req->rpc_rsp_cb = NULL;
   new_req->rsp_timeout_sec = DEFAULT_RPC_RSP_TIMEOUT;

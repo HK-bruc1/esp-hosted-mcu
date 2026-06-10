@@ -46,6 +46,7 @@ static struct rpc_lib_context rpc_lib_ctxt;
 /* uids are incrementing values from 1 onwards.
  * 0 means not a valid id */
 static uint32_t uid = 0;
+static h_mutex_t uid_mutex = NULL;
 
 /* structures used to keep track of response semaphores
  * and callbacks via their uid */
@@ -1006,11 +1007,13 @@ int rpc_send_req(ctrl_cmd_t *app_req)
 	}
 
 
+	h_mutex_lock(uid_mutex, H_BLOCK_MAX);
 	uid++;
 	// handle rollover in uid value
 	if (!uid)
 		uid++;
 	app_req->uid = uid;
+	h_mutex_unlock(uid_mutex);
 
 	H_LOGD(TAG, "app_req msgid[0x%x] with uid %" PRIu32, app_req->msg_id, app_req->uid);
 	if (!app_req->rpc_rsp_cb) {
@@ -1125,6 +1128,11 @@ int rpc_core_deinit(void)
 		H_LOGE(TAG, "cancel rpc rx thread failed");
 	}
 
+	if (uid_mutex) {
+		h_mutex_delete(uid_mutex);
+		uid_mutex = NULL;
+	}
+
 	if (serial_deinit()) {
 		ret = H_FAIL;
 		H_LOGE(TAG, "Serial de-init failed");
@@ -1162,6 +1170,13 @@ int rpc_core_init(void)
 	}
 	if (q_ret != H_OK || !rpc_rx_q || !rpc_tx_q) {
 		H_LOGE(TAG, "Failed to create app rpc msg Q");
+		goto free_bufs;
+	}
+
+	/* UID mutex init */
+	int mutex_ret = h_mutex_create(&uid_mutex);
+	if (mutex_ret != H_OK || !uid_mutex) {
+		H_LOGE(TAG, "Failed to create UID mutex");
 		goto free_bufs;
 	}
 

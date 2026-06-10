@@ -174,6 +174,11 @@ typedef struct {
     /* netif */
     int (*netif_create)(uint8_t if_type, uint8_t if_num);
     int (*netif_destroy)(uint8_t if_type, uint8_t if_num);
+
+    /* Post-init hook (optional — port may leave NULL).
+     * Called by core after bus init succeeds, before data path starts.
+     * Typical use: platform-specific subsystem init that depends on transport. */
+    void (*post_transport_init_hook)(void);
 } h_transport_contract_t;
 
 /* ── Global Contract Instances ──

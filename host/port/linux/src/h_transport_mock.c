@@ -66,6 +66,7 @@ const h_transport_contract_t g_h_transport = {
     .spi_transfer = mock_spi_transfer,
     .gpio_config  = mock_gpio_config,
     .gpio_set_intr = mock_gpio_set_intr,
+    .post_transport_init_hook = NULL,
     /* All other fields NULL — unused in mock SPI transport */
 };
 

@@ -458,7 +458,7 @@ static int sdio_get_len_from_slave(uint32_t *rx_size, uint32_t reg_val, bool is_
 	uint32_t temp;
 
 	if (!rx_size)
-		return ESP_FAIL;
+		return H_FAIL;
 	*rx_size = 0;
 
 	len &= ESP_SLAVE_LEN_MASK;
@@ -475,7 +475,7 @@ static int sdio_get_len_from_slave(uint32_t *rx_size, uint32_t reg_val, bool is_
 	if (len > ESP_RX_BUFFER_SIZE) {
 		ESP_LOGE(TAG, "%s: Len from slave[%ld] exceeds max [%d]",
 				__func__, len, ESP_RX_BUFFER_SIZE);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 #endif
 
@@ -492,7 +492,7 @@ static int sdio_get_len_from_slave(uint32_t *rx_size, bool is_lock_needed)
 	int ret = 0;
 
 	if (!rx_size)
-		return ESP_FAIL;
+		return H_FAIL;
 	*rx_size = 0;
 
 	ret = h_sdio_read_reg(sdio_handle, ESP_SLAVE_PACKET_LEN_REG,
@@ -517,7 +517,7 @@ static int sdio_get_len_from_slave(uint32_t *rx_size, bool is_lock_needed)
 	if (len > ESP_RX_BUFFER_SIZE) {
 		ESP_LOGE(TAG, "%s: Len from slave[%ld] exceeds max [%d]",
 				__func__, len, ESP_RX_BUFFER_SIZE);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 #endif
 
@@ -847,7 +847,7 @@ static int is_valid_sdio_rx_packet(uint8_t *rxbuff_a, uint16_t *len_a, uint16_t 
 }
 
 // pushes received packet data on to rx queue
-static esp_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
+static h_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t offset)
 {
 	uint8_t pkt_prio = PRIO_Q_OTHERS;
 	struct esp_payload_header *h= NULL;
@@ -874,13 +874,13 @@ static esp_err_t sdio_push_pkt_to_queue(uint8_t * rxbuff, uint16_t len, uint16_t
 
 	if( (!from_slave_queue[pkt_prio]) || (!sem_from_slave_queue)) {
 		ESP_LOGI(TAG, "uninitialised from_slave_queue or sem_from_slave_queue");
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	h_queue_send(from_slave_queue[pkt_prio], &buf_handle, H_BLOCK_MAX);
 	h_sem_give(sem_from_slave_queue);
 
-	return ESP_OK;
+	return H_OK;
 }
 
 /**
@@ -908,7 +908,7 @@ static void sdio_rx_free_buffer(uint8_t * buf)
 }
 
 // push buffer on to the queue
-static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
+static h_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 {
 	uint16_t len = 0;
 	uint16_t offset = 0;
@@ -923,15 +923,15 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		 * */
 		ESP_LOGW(TAG, "Dropping packet");
 		h_free(buf); buf = NULL;
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	if (sdio_push_pkt_to_queue(buf, len, offset)) {
 		ESP_LOGE(TAG, "Failed to push Rx packet to queue");
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
-	return ESP_OK;
+	return H_OK;
 }
 #else // H_SDIO_HOST_STREAMING_MODE
 // SDIO streaming mode
@@ -967,7 +967,7 @@ static void sdio_rx_free_buffer(uint8_t * buf)
 }
 
 // extract packets from the stream and push on to the queue
-static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
+static h_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 {
 	uint8_t * pkt_rxbuff = NULL;
 	uint16_t len = 0;
@@ -981,7 +981,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 			 * them after this error */
 			ESP_LOGE(TAG, "Dropping packet(s) from stream");
 			/* TODO: Free by caller? */
-			return ESP_FAIL;
+			return H_FAIL;
 		}
 		/* Allocate rx buffer */
 		pkt_rxbuff = sdio_buffer_alloc(MEMSET_REQUIRED);
@@ -993,7 +993,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 			/* Skip this packet and continue processing remaining stream data */
 			packet_size = len + offset;
 			if (packet_size > buf_len) {
-				return ESP_FAIL;
+				return H_FAIL;
 			}
 			buf_len -= packet_size;
 			buf     += packet_size;
@@ -1010,7 +1010,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 			ESP_LOGE(TAG, "packet size[%lu]>[%lu] too big for remaining stream data",
 					packet_size, buf_len);
 			sdio_buffer_free(pkt_rxbuff);
-			return ESP_FAIL;
+			return H_FAIL;
 		}
 		memcpy(pkt_rxbuff, buf, packet_size);
 
@@ -1023,7 +1023,7 @@ static esp_err_t sdio_push_data_to_queue(uint8_t * buf, uint32_t buf_len)
 		buf     += packet_size;
 	} while (buf_len);
 
-	return ESP_OK;
+	return H_OK;
 }
 #endif
 
@@ -1083,7 +1083,7 @@ esp_netif_t * create_sta_netif_with_static_ip(void)
 	return sta_netif;
 }
 
-static esp_err_t create_static_netif(void)
+static h_err_t create_static_netif(void)
 {
 	/* Only initialize networking stack if not already initialized */
 	if (!s_netif_sta) {
@@ -1092,13 +1092,13 @@ static esp_err_t create_static_netif(void)
 		s_netif_sta = create_sta_netif_with_static_ip();
 		assert(s_netif_sta);
 	}
-	return ESP_OK;
+	return H_OK;
 }
 #endif
 
 static void sdio_read_task(void *pvParameters)
 {
-	esp_err_t res = ESP_OK;
+	h_err_t res = H_OK;
 	uint8_t *rxbuff = NULL;
 	int ret;
 	uint32_t len_from_slave;
@@ -1153,7 +1153,7 @@ static void sdio_read_task(void *pvParameters)
 		res = h_sdio_wait_intr(sdio_handle, H_BLOCK_MAX);
 		ESP_LOGD(TAG, "--- SDIO intr received ---");
 
-		if (res != ESP_OK) {
+		if (res != H_OK) {
 			ESP_LOGE(TAG, "wait_slave_intr error: %d", res);
 			continue;
 		}
@@ -1534,7 +1534,7 @@ init_cleanup:
   *         buffer_to_free - buffer to be freed after tx
   *         free_buf_func - function used to free buffer_to_free
   *         flags - flags to set
-  * @retval int - ESP_OK or ESP_FAIL
+  * @retval int - H_OK or H_FAIL
   */
 int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		uint8_t *payload_buf, uint16_t payload_len, uint8_t buff_zcopy,
@@ -1552,7 +1552,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 		ESP_LOGE(TAG, "tx fail: NULL buff, invalid len (%u) or len > max len (%u), transport_up(%u))",
 				payload_len, MAX_PAYLOAD_SIZE, transport_up);
 		H_FREE_PTR_WITH_FUNC(free_func, buffer_to_free);
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 	buf_handle.payload_zcopy = buff_zcopy;
 	buf_handle.if_type = iface_type;
@@ -1578,7 +1578,7 @@ int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
 	h_sem_give(sem_to_slave_queue);
 
 
-	return ESP_OK;
+	return H_OK;
 }
 
 void check_if_max_freq_used(uint8_t chip_type)
@@ -1597,17 +1597,17 @@ void check_if_max_freq_used(uint8_t chip_type)
 #define CARD_INIT_DELAY_MS 100
 
 // retry until timeout_ms
-static esp_err_t transport_card_init(void *bus_handle, uint32_t timeout_ms)
+static h_err_t transport_card_init(void *bus_handle, uint32_t timeout_ms)
 {
 	int num_loops = timeout_ms / CARD_INIT_DELAY_MS;
 	int i = 0;
-	int res = ESP_FAIL;
+	int res = H_FAIL;
 
 	// call card init, even if timeout_ms is 0
 	do {
 		res = h_sdio_card_init(bus_handle, (i == 0) ? true : false);
 		h_msleep(100);
-		if (res == ESP_OK) {
+		if (res == H_OK) {
 			break;
 		}
 		i++;
@@ -1616,7 +1616,7 @@ static esp_err_t transport_card_init(void *bus_handle, uint32_t timeout_ms)
 	return res;
 }
 
-static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
+static h_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 {
 	h_gpio_config(reset_pin.pin, H_GPIO_MODE_OUTPUT);
 	h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
@@ -1625,7 +1625,7 @@ static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 	h_msleep(10);
 	h_gpio_write(reset_pin.pin, H_RESET_VAL_ACTIVE);
 	h_msleep(H_HOST_SDIO_RESET_DELAY_MS);
-	return ESP_OK;
+	return H_OK;
 }
 
 #define CARD_INIT_TIMEOUT_MS 1500

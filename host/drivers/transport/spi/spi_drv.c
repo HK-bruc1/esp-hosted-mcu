@@ -110,7 +110,7 @@ esp_netif_t * create_sta_netif_with_static_ip(void)
 	return sta_netif;
 }
 
-static esp_err_t create_static_netif(void)
+static h_err_t create_static_netif(void)
 {
 	/* Only initialize networking stack if not already initialized */
 	if (!s_netif_sta) {
@@ -119,7 +119,7 @@ static esp_err_t create_static_netif(void)
 		s_netif_sta = create_sta_netif_with_static_ip();
 		assert(s_netif_sta);
 	}
-	return ESP_OK;
+	return H_OK;
 }
 #endif
 
@@ -897,7 +897,7 @@ void check_if_max_freq_used(uint8_t chip_type)
 		break;
 	}
 }
-static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
+static h_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 {
 	ESP_LOGI(TAG, "Resetting slave on SPI bus with pin %d", reset_pin.pin);
 	h_gpio_config(reset_pin.pin, H_GPIO_MODE_OUTPUT);
@@ -911,17 +911,17 @@ static esp_err_t transport_gpio_reset(void *bus_handle, gpio_pin_t reset_pin)
 	 * the GPIOs going high during the reset.
 	 */
 	h_msleep(500);
-	return ESP_OK;
+	return H_OK;
 }
 
 int ensure_slave_bus_ready(void *bus_handle)
 {
-	esp_err_t res = ESP_OK;
+	h_err_t res = H_OK;
 	gpio_pin_t reset_pin = { .port = H_GPIO_PORT_RESET, .pin = H_GPIO_PIN_RESET };
 
 	if (ESP_TRANSPORT_OK != esp_hosted_transport_get_reset_config(&reset_pin)) {
 		ESP_LOGE(TAG, "Unable to get RESET config for transport");
-		return ESP_FAIL;
+		return H_FAIL;
 	}
 
 	assert(reset_pin.pin != -1);
@@ -941,7 +941,7 @@ int ensure_slave_bus_ready(void *bus_handle)
 int bus_inform_slave_host_power_save_start(void)
 {
 	ESP_LOGI(TAG, "Inform slave, host power save is started");
-	int ret = ESP_OK;
+	int ret = H_OK;
 
 	/*
 	 * If the transport is not ready yet (which happens before receiving INIT event),
@@ -999,7 +999,7 @@ int bus_inform_slave_host_power_save_start(void)
 int bus_inform_slave_host_power_save_stop(void)
 {
 	ESP_LOGI(TAG, "Inform slave, host power save is stopped");
-	int ret = ESP_OK;
+	int ret = H_OK;
 
 	/*
 	 * If the transport is not ready yet (which happens before receiving INIT event),

@@ -22,6 +22,9 @@
 #define H_FEATURE_OTA        0
 #define H_FEATURE_NETSPLIT   0
 
+/* Transport buffer size (mock SPI) */
+#define H_MAX_TRANSPORT_BUFFER_SIZE  1600
+
 /* Transport config */
 #define H_TEST_RAW_TP_DIR  0
 #define H_WIFI_TX_DATA_THROTTLE_LOW_THRESHOLD  0
