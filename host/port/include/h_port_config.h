@@ -64,6 +64,27 @@
 
 #endif /* !H_PORT_USING_LINUX_FALLBACK */
 
+/* ── Wi-Fi / NVS / firmware config portability mappings ──
+ * These H_* macros are the portable interface used by core layer code.
+ * Each port maps its platform-specific config (e.g. Kconfig CONFIG_*) to these.
+ * Default values here apply when no port override is active (e.g. Linux mock).
+ * WP4: CONFIG_* → H_* portability bridge */
+#ifndef H_WIFI_AUTO_CONNECT_ON_STA_START
+  #define H_WIFI_AUTO_CONNECT_ON_STA_START  0
+#endif
+#ifndef H_FW_VERSION_MISMATCH_WARNING_SUPPRESS
+  #define H_FW_VERSION_MISMATCH_WARNING_SUPPRESS  0
+#endif
+#ifndef H_WIFI_NVS_ENABLED
+  #define H_WIFI_NVS_ENABLED  0
+#endif
+#ifndef H_PEER_DATA_TRANSFER
+  #define H_PEER_DATA_TRANSFER  0
+#endif
+#ifndef H_MAX_CUSTOM_MSG_HANDLERS
+  #define H_MAX_CUSTOM_MSG_HANDLERS  0
+#endif
+
 #endif /* !H_PORT_CONFIG_FROM_PORT */
 
 #endif /* H_PORT_CONFIG_H */

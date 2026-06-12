@@ -754,14 +754,14 @@ static int compare_fw_version(uint32_t slave_version)
 		return 0;
 	} else if (host_version > slave_version) {
 	    // host version > slave version
-#ifndef CONFIG_ESP_HOSTED_FW_VERSION_MISMATCH_WARNING_SUPPRESS
+#if !H_FW_VERSION_MISMATCH_WARNING_SUPPRESS
 		H_LOGW(TAG, "Version mismatch: Host [%u.%u.%u] > Co-proc [%u.%u.%u] ==> Upgrade co-proc to avoid RPC timeouts",
 			ESP_HOSTED_VERSION_PRINTF_ARGS(host_version), ESP_HOSTED_VERSION_PRINTF_ARGS(slave_version));
 #endif
 		return -1;
 	} else {
 	    // host version < slave version
-#ifndef CONFIG_ESP_HOSTED_FW_VERSION_MISMATCH_WARNING_SUPPRESS
+#if !H_FW_VERSION_MISMATCH_WARNING_SUPPRESS
 		H_LOGW(TAG, "Version mismatch: Host [%u.%u.%u] < Co-proc [%u.%u.%u] ==> Upgrade host to avoid compatibility issues",
 			ESP_HOSTED_VERSION_PRINTF_ARGS(host_version), ESP_HOSTED_VERSION_PRINTF_ARGS(slave_version));
 #endif

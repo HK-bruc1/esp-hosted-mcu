@@ -47,7 +47,7 @@ uint8_t restart_after_slave_ota = 0;
 #define GET_FWVERSION_TIMEOUT_SEC                         1
 
 /* Forward declarations */
-#if CONFIG_ESP_HOSTED_WIFI_AUTO_CONNECT_ON_STA_START
+#if H_WIFI_AUTO_CONNECT_ON_STA_START
 static int rpc_wifi_connect_async(void);
 #endif
 static h_err_t rpc_iface_feature_control(rcp_feature_control_t *feature_control);
@@ -314,7 +314,7 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 				/* Trigger connection when station is started */
 				if (!netif_started && !is_wifi_netif_started(H_WIFI_IF_STA)) {
 					h_event_wifi_post(wifi_event_id, 0, 0, H_BLOCK_MAX);
-#if CONFIG_ESP_HOSTED_WIFI_AUTO_CONNECT_ON_STA_START
+#if H_WIFI_AUTO_CONNECT_ON_STA_START
 					rpc_wifi_connect_async();
 #endif
 					netif_started = true;
@@ -379,7 +379,7 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 			esp_hosted_event_mem_info_t *p_e = &app_event->u.e_mem_info;
 			h_event_post(H_EVENT_HOSTED, ESP_HOSTED_EVENT_MEM_MONITOR, p_e, sizeof(esp_hosted_event_mem_info_t));
 			break;
-#ifdef H_PEER_DATA_TRANSFER
+#if H_PEER_DATA_TRANSFER
 		} case RPC_ID__Event_CustomRpc: {
 			/* Custom RPC events are handled directly in rpc_evt.c via user callback */
 			break;
@@ -511,7 +511,7 @@ int rpc_register_event_callbacks(void)
 		{ RPC_ID__Event_WifiDppFail,               rpc_event_callback },
 #endif
 #endif
-#ifdef H_PEER_DATA_TRANSFER
+#if H_PEER_DATA_TRANSFER
 		{ RPC_ID__Event_CustomRpc,                 rpc_event_callback },
 #endif
 	};
@@ -734,7 +734,7 @@ int rpc_rsp_callback(ctrl_cmd_t * app_resp)
 	case RPC_ID__Resp_SuppDppStopListen:
 #endif
 
-#ifdef H_PEER_DATA_TRANSFER
+#if H_PEER_DATA_TRANSFER
 	case RPC_ID__Resp_CustomRpc:
 #endif
 
@@ -1342,7 +1342,7 @@ int rpc_wifi_init(const h_wifi_init_config_t *arg)
 	h_wifi_adapt_init_config_to_native(arg, &native_cfg);
 	h_memcpy(&req->u.wifi_init_config, &native_cfg, sizeof(wifi_init_config_t));
 
-#ifdef CONFIG_ESP_WIFI_NVS_ENABLED
+#if H_WIFI_NVS_ENABLED
 	req->u.wifi_init_config.nvs_enable = YES;
 #endif
 	resp = rpc_slaveif_wifi_init(req);
@@ -1416,7 +1416,7 @@ int rpc_wifi_connect(void)
 	return rpc_rsp_callback(resp);
 }
 
-#if CONFIG_ESP_HOSTED_WIFI_AUTO_CONNECT_ON_STA_START
+#if H_WIFI_AUTO_CONNECT_ON_STA_START
 static int rpc_wifi_connect_async(void)
 {
 	/* implemented asynchronous */
@@ -2644,7 +2644,7 @@ static h_err_t rpc_iface_feature_control(rcp_feature_control_t *feature_control)
 	return rpc_rsp_callback(resp);
 }
 
-#ifdef H_PEER_DATA_TRANSFER
+#if H_PEER_DATA_TRANSFER
 
 h_err_t esp_hosted_send_custom_data(uint32_t msg_id_to_send, const uint8_t *data_to_send, size_t data_len_to_send)
 {

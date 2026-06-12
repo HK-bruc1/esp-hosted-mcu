@@ -892,4 +892,45 @@ typedef int                gpio_pin_state_t;
   #define H_HOST_SDIO_RESET_DELAY_MS   1500
 #endif
 
+/* ── Wi-Fi / NVS / firmware config portability mappings (WP4) ──
+ * CONFIG_* → H_* bridges so core layer code never references CONFIG_*
+ * directly.  The generic h_port_config.h provides fallback defaults
+ * (all 0) for ports that don't override these. */
+#ifdef CONFIG_ESP_HOSTED_WIFI_AUTO_CONNECT_ON_STA_START
+  #define H_WIFI_AUTO_CONNECT_ON_STA_START  CONFIG_ESP_HOSTED_WIFI_AUTO_CONNECT_ON_STA_START
+#else
+  #undef H_WIFI_AUTO_CONNECT_ON_STA_START
+  #define H_WIFI_AUTO_CONNECT_ON_STA_START  0
+#endif
+
+#ifdef CONFIG_ESP_HOSTED_FW_VERSION_MISMATCH_WARNING_SUPPRESS
+  #define H_FW_VERSION_MISMATCH_WARNING_SUPPRESS  1
+#else
+  #undef H_FW_VERSION_MISMATCH_WARNING_SUPPRESS
+  #define H_FW_VERSION_MISMATCH_WARNING_SUPPRESS  0
+#endif
+
+#ifdef CONFIG_ESP_WIFI_NVS_ENABLED
+  #define H_WIFI_NVS_ENABLED  1
+#else
+  #undef H_WIFI_NVS_ENABLED
+  #define H_WIFI_NVS_ENABLED  0
+#endif
+
+/* Custom RPC portability mappings.
+ * Keep these always defined so core can use value-based #if checks. */
+#ifdef CONFIG_ESP_HOSTED_ENABLE_PEER_DATA_TRANSFER
+  #define H_PEER_DATA_TRANSFER  1
+#else
+  #undef H_PEER_DATA_TRANSFER
+  #define H_PEER_DATA_TRANSFER  0
+#endif
+
+#ifdef CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS
+  #define H_MAX_CUSTOM_MSG_HANDLERS  CONFIG_ESP_HOSTED_MAX_CUSTOM_MSG_HANDLERS
+#else
+  #undef H_MAX_CUSTOM_MSG_HANDLERS
+  #define H_MAX_CUSTOM_MSG_HANDLERS  0
+#endif
+
 #endif /* H_PORT_CONFIG_ESPIDF_H */
