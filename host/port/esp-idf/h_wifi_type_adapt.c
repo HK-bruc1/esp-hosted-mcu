@@ -10,6 +10,7 @@
 #include "h_port_contract.h"
 #include <string.h>
 #include "esp_idf_version.h"
+#include "h_dpp_types.h"
 
 /* ── Compile-time coarse consistency checks ──
  * These do NOT assert field-level offsetof equality because portable
@@ -19,6 +20,19 @@
  */
 
 /* Enum value sanity checks — cast to int to avoid -Werror=enum-compare */
+
+/* DPP enum value checks */
+#if H_DPP_SUPPORT
+#include "esp_dpp.h"
+_Static_assert((int)H_SUPP_DPP_EVENT_URI_READY == (int)ESP_SUPP_DPP_URI_READY,   "dpp event enum drift");
+_Static_assert((int)H_SUPP_DPP_EVENT_CFG_RECVD == (int)ESP_SUPP_DPP_CFG_RECVD,   "dpp event enum drift");
+_Static_assert((int)H_SUPP_DPP_EVENT_FAIL      == (int)ESP_SUPP_DPP_FAIL,        "dpp event enum drift");
+_Static_assert((int)H_SUPP_DPP_BOOTSTRAP_QR_CODE == (int)ESP_SUPP_DPP_BOOTSTRAP_QR_CODE, "dpp bootstrap enum drift");
+_Static_assert((int)H_SUPP_DPP_BOOTSTRAP_PKEX    == (int)ESP_SUPP_DPP_BOOTSTRAP_PKEX,    "dpp bootstrap enum drift");
+#endif
+
+/* Storage enum value checks */
+_Static_assert((int)H_WIFI_STORAGE_FLASH == (int)WIFI_STORAGE_FLASH, "storage enum drift");
 _Static_assert((int)H_WIFI_MODE_NULL == (int)WIFI_MODE_NULL, "mode enum drift");
 _Static_assert((int)H_WIFI_MODE_STA  == (int)WIFI_MODE_STA,  "mode enum drift");
 _Static_assert((int)H_WIFI_MODE_AP   == (int)WIFI_MODE_AP,   "mode enum drift");

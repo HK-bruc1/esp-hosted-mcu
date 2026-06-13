@@ -11,9 +11,132 @@
 #include "esp_hosted_transport.h"
 #include "h_config.h"
 #include "h_wrapper.h"
+#include "h_event.h"
 #include "esp_hosted_bitmasks.h"
 
 static const char *TAG = "rpc_evt";
+
+enum {
+	H_WIFI_RPC_WIRE_READY = 0,
+	H_WIFI_RPC_WIRE_SCAN_DONE = 1,
+	H_WIFI_RPC_WIRE_STA_START = 2,
+	H_WIFI_RPC_WIRE_STA_STOP = 3,
+	H_WIFI_RPC_WIRE_STA_CONNECTED = 4,
+	H_WIFI_RPC_WIRE_STA_DISCONNECTED = 5,
+	H_WIFI_RPC_WIRE_AUTHMODE_CHANGE = 6,
+	H_WIFI_RPC_WIRE_AP_START = 12,
+	H_WIFI_RPC_WIRE_AP_STOP = 13,
+	H_WIFI_RPC_WIRE_AP_STACONNECTED = 14,
+	H_WIFI_RPC_WIRE_AP_STADISCONNECTED = 15,
+	H_WIFI_RPC_WIRE_ITWT_SETUP = 28,
+	H_WIFI_RPC_WIRE_ITWT_TEARDOWN = 29,
+	H_WIFI_RPC_WIRE_ITWT_PROBE = 30,
+	H_WIFI_RPC_WIRE_ITWT_SUSPEND = 31,
+	H_WIFI_RPC_WIRE_HOME_CHANNEL_CHANGE = 40,
+};
+
+static h_err_t h_rpc_wire_event_to_host(int32_t wire_id, int32_t *host_id,
+		const char **name)
+{
+	switch (wire_id) {
+	case H_WIFI_RPC_WIRE_READY:
+		*host_id = H_EVENT_WIFI_READY;
+		*name = "Wi-Fi Ready";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_SCAN_DONE:
+		*host_id = H_EVENT_WIFI_SCAN_DONE;
+		*name = "Wi-Fi scan done";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_STA_START:
+		*host_id = H_EVENT_WIFI_STA_START;
+		*name = "Wi-Fi Start";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_STA_STOP:
+		*host_id = H_EVENT_WIFI_STA_STOP;
+		*name = "Wi-Fi Stop";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_STA_CONNECTED:
+		*host_id = H_EVENT_WIFI_STA_CONNECTED;
+		*name = "Wi-Fi Connected";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_STA_DISCONNECTED:
+		*host_id = H_EVENT_WIFI_STA_DISCONNECTED;
+		*name = "Wi-Fi Disconnected";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_AUTHMODE_CHANGE:
+		*host_id = H_EVENT_WIFI_AUTHMODE_CHANGE;
+		*name = "Wi-Fi AuthMode change";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_AP_START:
+		*host_id = H_EVENT_WIFI_AP_START;
+		*name = "Wi-Fi AP Start";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_AP_STOP:
+		*host_id = H_EVENT_WIFI_AP_STOP;
+		*name = "Wi-Fi AP stop";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_AP_STACONNECTED:
+		*host_id = H_EVENT_WIFI_AP_STACONNECTED;
+		*name = "Wi-Fi AP station connected";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_AP_STADISCONNECTED:
+		*host_id = H_EVENT_WIFI_AP_STADISCONNECTED;
+		*name = "Wi-Fi AP station disconnected";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_ITWT_SETUP:
+		*host_id = H_EVENT_WIFI_ITWT_SETUP;
+		*name = "Wi-Fi iTWT setup";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_ITWT_TEARDOWN:
+		*host_id = H_EVENT_WIFI_ITWT_TEARDOWN;
+		*name = "Wi-Fi iTWT teardown";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_ITWT_PROBE:
+		*host_id = H_EVENT_WIFI_ITWT_PROBE;
+		*name = "Wi-Fi iTWT probe";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_ITWT_SUSPEND:
+		*host_id = H_EVENT_WIFI_ITWT_SUSPEND;
+		*name = "Wi-Fi iTWT suspend";
+		return H_OK;
+	case H_WIFI_RPC_WIRE_HOME_CHANNEL_CHANGE:
+		*host_id = H_EVENT_WIFI_HOME_CHANNEL_CHANGE;
+		*name = "Wi-Fi Home channel change";
+		return H_OK;
+	default:
+		*host_id = -1;
+		*name = NULL;
+		return H_FAIL;
+	}
+}
+
+static void rpc_copy_dpp_sta_config_to_host(h_wifi_config_t *dst, WifiStaConfig *src)
+{
+	if (!dst || !src) {
+		return;
+	}
+
+	h_memset(dst, 0, sizeof(*dst));
+	if (src->ssid.data && src->ssid.len) {
+		h_memcpy(dst->sta.ssid, src->ssid.data,
+				H_MIN(src->ssid.len, sizeof(dst->sta.ssid)));
+		dst->sta.ssid_len = H_MIN(src->ssid.len, sizeof(dst->sta.ssid));
+	}
+	if (src->password.data && src->password.len) {
+		h_memcpy(dst->sta.password, src->password.data,
+				H_MIN(src->password.len, sizeof(dst->sta.password)));
+	}
+	if (src->bssid.data && src->bssid.len) {
+		h_memcpy(dst->sta.bssid, src->bssid.data,
+				H_MIN(src->bssid.len, sizeof(dst->sta.bssid)));
+	}
+	dst->sta.channel = src->channel;
+	dst->sta.listen_interval = src->listen_interval;
+	if (src->pmf_cfg) {
+		dst->sta.pmf_cfg_capable = src->pmf_cfg->capable ? 1 : 0;
+		dst->sta.pmf_cfg_required = src->pmf_cfg->required ? 1 : 0;
+	}
+}
 
 #if H_PEER_DATA_TRANSFER
 #define MAX_CUSTOM_CALLBACKS H_MAX_CUSTOM_MSG_HANDLERS
@@ -142,7 +265,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 		app_ntfy->u.e_heartbeat.hb_num = rpc_msg->event_heartbeat->hb_num;
 		break;
 	} case RPC_ID__Event_AP_StaConnected: {
-		wifi_event_ap_staconnected_t * p_a = &(app_ntfy->u.e_wifi_ap_staconnected);
+		h_event_wifi_ap_staconnected_t * p_a = &(app_ntfy->u.e_wifi_ap_staconnected);
 		RpcEventAPStaConnected * p_c = rpc_msg->event_ap_sta_connected;
 
 		RPC_FAIL_ON_NULL(event_ap_sta_connected);
@@ -159,7 +282,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 
 		break;
 	} case RPC_ID__Event_AP_StaDisconnected: {
-		wifi_event_ap_stadisconnected_t * p_a = &(app_ntfy->u.e_wifi_ap_stadisconnected);
+		h_event_wifi_ap_stadisconnected_t * p_a = &(app_ntfy->u.e_wifi_ap_stadisconnected);
 		RpcEventAPStaDisconnected * p_c = rpc_msg->event_ap_sta_disconnected;
 
 		H_LOGD(TAG, "EVENT: AP ->  sta disconnected");
@@ -180,7 +303,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 		break;
 #if H_WIFI_HE_SUPPORT
 	} case RPC_ID__Event_StaItwtSetup: {
-		wifi_event_sta_itwt_setup_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_setup);
+		h_event_wifi_sta_itwt_setup_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_setup);
 		RpcEventStaItwtSetup * p_c = rpc_msg->event_sta_itwt_setup;
 
 		H_LOGD(TAG, "EVENT: iTWT ->  setup");
@@ -208,7 +331,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 
 		break;
 	} case RPC_ID__Event_StaItwtTeardown: {
-		wifi_event_sta_itwt_teardown_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_teardown);
+		h_event_wifi_sta_itwt_teardown_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_teardown);
 		RpcEventStaItwtTeardown * p_c = rpc_msg->event_sta_itwt_teardown;
 
 		H_LOGD(TAG, "EVENT: iTWT ->  teardown");
@@ -220,7 +343,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 
 		break;
 	} case RPC_ID__Event_StaItwtSuspend: {
-		wifi_event_sta_itwt_suspend_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_suspend);
+		h_event_wifi_sta_itwt_suspend_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_suspend);
 		RpcEventStaItwtSuspend * p_c = rpc_msg->event_sta_itwt_suspend;
 		int num_elements = sizeof(p_a->actual_suspend_time_ms) / sizeof(p_a->actual_suspend_time_ms[0]);
 		int i;
@@ -239,7 +362,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 
 		break;
 	} case RPC_ID__Event_StaItwtProbe: {
-		wifi_event_sta_itwt_probe_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_probe);
+		h_event_wifi_sta_itwt_probe_t * p_a = &(app_ntfy->u.e_wifi_sta_itwt_probe);
 		RpcEventStaItwtProbe * p_c = rpc_msg->event_sta_itwt_probe;
 
 		H_LOGD(TAG, "EVENT: iTWT ->  probe");
@@ -254,49 +377,21 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 	} case RPC_ID__Event_WifiEventNoArgs: {
 		RPC_FAIL_ON_NULL(event_wifi_event_no_args);
 		app_ntfy->resp_event_status = rpc_msg->event_wifi_event_no_args->resp;
-        H_LOGI(TAG, "Event [0x%" PRIx32 "] received", rpc_msg->event_wifi_event_no_args->event_id);
-		app_ntfy->u.e_wifi_simple.wifi_event_id = rpc_msg->event_wifi_event_no_args->event_id;
+		int32_t wire_id = rpc_msg->event_wifi_event_no_args->event_id;
+		int32_t host_id = -1;
+		const char *event_name = NULL;
 
-		switch (rpc_msg->event_wifi_event_no_args->event_id) {
-		/* basic events populated, not all */
-		case WIFI_EVENT_WIFI_READY:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Ready");
-			break;
-		case WIFI_EVENT_SCAN_DONE:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi scan done");
-			break;
-		case WIFI_EVENT_STA_START:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Start");
-			break;
-		case WIFI_EVENT_STA_STOP:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Stop");
-			break;
-		case WIFI_EVENT_STA_CONNECTED:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Connected");
-			break;
-		case WIFI_EVENT_STA_DISCONNECTED:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Disconnected");
-			break;
-		case WIFI_EVENT_STA_AUTHMODE_CHANGE:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi AuthMode change");
-			break;
-		case WIFI_EVENT_AP_START:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi AP Start");
-			break;
-		case WIFI_EVENT_AP_STOP:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi AP stop");
-			break;
-		case WIFI_EVENT_HOME_CHANNEL_CHANGE:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Home channel change");
-			break;
-		default:
-			H_LOGI(TAG, "EVT rcvd: Wi-Fi Event[%" PRId32 "] ignored", rpc_msg->event_wifi_event_no_args->event_id);
-			break;
+		H_LOGI(TAG, "Event [0x%" PRIx32 "] received", wire_id);
+		if (h_rpc_wire_event_to_host(wire_id, &host_id, &event_name) == H_OK) {
+			H_LOGI(TAG, "EVT rcvd: %s", event_name);
+		} else {
+			H_LOGI(TAG, "EVT rcvd: Wi-Fi wire event[%" PRId32 "] ignored", wire_id);
 		}
+		app_ntfy->u.e_wifi_simple.h_event_id = host_id;
 		break;
 	} case RPC_ID__Event_StaScanDone: {
 		RpcEventStaScanDone *p_c = rpc_msg->event_sta_scan_done;
-		wifi_event_sta_scan_done_t *p_a = &app_ntfy->u.e_wifi_sta_scan_done;
+		h_event_wifi_sta_scan_done_t *p_a = &app_ntfy->u.e_wifi_sta_scan_done;
 		RPC_FAIL_ON_NULL(event_sta_scan_done);
 		app_ntfy->resp_event_status = p_c->resp;
 		H_LOGI(TAG, "Event Scan Done, %" PRIu32 " items", rpc_msg->event_sta_scan_done->scan_done->number);
@@ -308,7 +403,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 		RPC_FAIL_ON_NULL(event_sta_connected);
 		RPC_FAIL_ON_NULL(event_sta_connected->sta_connected);
 		WifiEventStaConnected *p_c = rpc_msg->event_sta_connected->sta_connected;
-		wifi_event_sta_connected_t *p_a = &app_ntfy->u.e_wifi_sta_connected;
+		h_event_wifi_sta_connected_t *p_a = &app_ntfy->u.e_wifi_sta_connected;
 		app_ntfy->resp_event_status = rpc_msg->event_sta_connected->resp;
 		if (H_OK == app_ntfy->resp_event_status) {
 			RPC_FAIL_ON_NULL_PRINT(p_c->ssid.data, "NULL SSID");
@@ -325,7 +420,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 		RPC_FAIL_ON_NULL(event_sta_disconnected);
 		RPC_FAIL_ON_NULL(event_sta_disconnected->sta_disconnected);
 		WifiEventStaDisconnected *p_c = rpc_msg->event_sta_disconnected->sta_disconnected;
-		wifi_event_sta_disconnected_t *p_a = &app_ntfy->u.e_wifi_sta_disconnected;
+		h_event_wifi_sta_disconnected_t *p_a = &app_ntfy->u.e_wifi_sta_disconnected;
 		app_ntfy->resp_event_status = rpc_msg->event_sta_connected->resp;
 		if (H_OK == app_ntfy->resp_event_status) {
 			RPC_FAIL_ON_NULL_PRINT(p_c->ssid.data, "NULL SSID");
@@ -366,7 +461,7 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 		RPC_FAIL_ON_NULL(event_mem_monitor->curr_external->mem_8bit);
 
 		RpcEventMemMonitor *p_c = rpc_msg->event_mem_monitor;
-		esp_hosted_event_mem_info_t *p_a = &app_ntfy->u.e_mem_info;
+		h_event_hosted_mem_info_t *p_a = &app_ntfy->u.e_mem_info;
 
 		p_a->curr_total_free_heap_size = p_c->curr_total_free_heap_size;
 		p_a->curr_min_free_heap_size = p_c->curr_min_free_heap_size;
@@ -384,31 +479,31 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 	}
 	case RPC_ID__Event_SuppDppUriReady: {
 		RpcEventSuppDppUriReady *p_c = rpc_msg->event_supp_dpp_uri_ready;
-		supp_wifi_event_dpp_uri_ready_t *p_a = &app_ntfy->u.e_dpp_uri_ready;
+		h_event_wifi_dpp_uri_ready_t *p_a = &app_ntfy->u.e_dpp_uri_ready;
 		app_ntfy->resp_event_status = rpc_msg->event_supp_dpp_uri_ready->resp;
 
-		h_memset(p_a->uri, 0, DPP_URI_LEN_MAX);
+		h_memset(p_a->uri, 0, H_EVENT_WIFI_DPP_URI_LEN_MAX);
 
 		p_a->uri_data_len = p_c->qrcode.len;
-		if (p_a->uri_data_len <= DPP_URI_LEN_MAX) {
+		if (p_a->uri_data_len <= H_EVENT_WIFI_DPP_URI_LEN_MAX) {
 			h_memcpy(p_a->uri, p_c->qrcode.data, p_a->uri_data_len);
 		} else {
-			H_LOGE(TAG, "Incoming URI is too long (over %d bytes). Increase Kconfig ESP_HOSTED_DPP_URI_LEN_MAX for proper operation", DPP_URI_LEN_MAX - 1);
+			H_LOGE(TAG, "Incoming URI is too long (over %d bytes). Increase Kconfig ESP_HOSTED_DPP_URI_LEN_MAX for proper operation", H_EVENT_WIFI_DPP_URI_LEN_MAX - 1);
 			p_a->uri_data_len = 0;
 		}
 		break;
 	}
 	case RPC_ID__Event_SuppDppCfgRecvd: {
 		RpcEventSuppDppCfgRecvd *p_c = rpc_msg->event_supp_dpp_cfg_recvd;
-		supp_wifi_event_dpp_config_received_t *p_a = &app_ntfy->u.e_dpp_config_received;
+		h_event_wifi_dpp_config_received_t *p_a = &app_ntfy->u.e_dpp_config_received;
 		app_ntfy->resp_event_status = rpc_msg->event_supp_dpp_uri_ready->resp;
 
-		rpc_copy_wifi_sta_config(&p_a->wifi_cfg.sta, p_c->cfg->sta);
+		rpc_copy_dpp_sta_config_to_host(&p_a->wifi_cfg, p_c->cfg->sta);
 		break;
 	}
 	case RPC_ID__Event_SuppDppFail: {
 		RpcEventSuppDppFail *p_c = rpc_msg->event_supp_dpp_fail;
-		supp_wifi_event_dpp_failed_t *p_a = &app_ntfy->u.e_dpp_failed;
+		h_event_wifi_dpp_failed_t *p_a = &app_ntfy->u.e_dpp_failed;
 		app_ntfy->resp_event_status = rpc_msg->event_supp_dpp_fail->resp;
 
 		p_a->failure_reason = p_c->reason;
@@ -418,31 +513,31 @@ int rpc_parse_evt(Rpc *rpc_msg, ctrl_cmd_t *app_ntfy)
 	}
 	case RPC_ID__Event_WifiDppUriReady: {
 		RpcEventWifiDppUriReady *p_c = rpc_msg->event_wifi_dpp_uri_ready;
-		supp_wifi_event_dpp_uri_ready_t *p_a = &app_ntfy->u.e_dpp_uri_ready;
+		h_event_wifi_dpp_uri_ready_t *p_a = &app_ntfy->u.e_dpp_uri_ready;
 		app_ntfy->resp_event_status = rpc_msg->event_supp_dpp_uri_ready->resp;
 
-		h_memset(p_a->uri, 0, DPP_URI_LEN_MAX);
+		h_memset(p_a->uri, 0, H_EVENT_WIFI_DPP_URI_LEN_MAX);
 
 		p_a->uri_data_len = p_c->qrcode.len;
-		if (p_a->uri_data_len <= DPP_URI_LEN_MAX) {
+		if (p_a->uri_data_len <= H_EVENT_WIFI_DPP_URI_LEN_MAX) {
 			h_memcpy(p_a->uri, p_c->qrcode.data, p_a->uri_data_len);
 		} else {
-			H_LOGE(TAG, "Incoming URI is too long (over %d bytes). Increase Kconfig ESP_HOSTED_DPP_URI_LEN_MAX for proper operation", DPP_URI_LEN_MAX - 1);
+			H_LOGE(TAG, "Incoming URI is too long (over %d bytes). Increase Kconfig ESP_HOSTED_DPP_URI_LEN_MAX for proper operation", H_EVENT_WIFI_DPP_URI_LEN_MAX - 1);
 			p_a->uri_data_len = 0;
 		}
 		break;
 	}
 	case RPC_ID__Event_WifiDppCfgRecvd: {
 		RpcEventWifiDppCfgRecvd *p_c = rpc_msg->event_wifi_dpp_cfg_recvd;
-		supp_wifi_event_dpp_config_received_t *p_a = &app_ntfy->u.e_dpp_config_received;
+		h_event_wifi_dpp_config_received_t *p_a = &app_ntfy->u.e_dpp_config_received;
 		app_ntfy->resp_event_status = rpc_msg->event_supp_dpp_uri_ready->resp;
 
-		rpc_copy_wifi_sta_config(&p_a->wifi_cfg.sta, p_c->cfg->sta);
+		rpc_copy_dpp_sta_config_to_host(&p_a->wifi_cfg, p_c->cfg->sta);
 		break;
 	}
 	case RPC_ID__Event_WifiDppFail: {
 		RpcEventWifiDppFail *p_c = rpc_msg->event_wifi_dpp_fail;
-		supp_wifi_event_dpp_failed_t *p_a = &app_ntfy->u.e_dpp_failed;
+		h_event_wifi_dpp_failed_t *p_a = &app_ntfy->u.e_dpp_failed;
 		app_ntfy->resp_event_status = rpc_msg->event_supp_dpp_fail->resp;
 
 		p_a->failure_reason = p_c->reason;

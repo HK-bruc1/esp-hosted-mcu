@@ -16,6 +16,8 @@
 #include "esp_hosted_misc.h"
 #include "esp_hosted_misc_types.h"
 #include "h_port_config.h"
+#include "h_event.h"
+#include "h_dpp_types.h"
 #if H_WIFI_ENTERPRISE_SUPPORT
 #include "esp_eap_client.h"
 #endif
@@ -135,7 +137,7 @@ typedef struct {
 /** @brief Parameters for an SSID scan. */
 typedef struct {
 	bool block;
-	wifi_scan_config_t cfg;
+	h_wifi_scan_config_t cfg;
 	uint8_t cfg_set;
 } wifi_scan_cfg_t;
 
@@ -144,7 +146,7 @@ typedef struct {
 	int number;
 	/* dynamic size */
 	//wifi_scanlist_t *out_list;
-	wifi_ap_record_t *out_list;
+	h_wifi_ap_record_t *out_list;
 } wifi_scan_ap_list_t;
 
 typedef struct {
@@ -276,7 +278,7 @@ typedef struct {
 
 typedef struct {
 	const char *chan_list;
-	esp_supp_dpp_bootstrap_t type;
+	h_supp_dpp_bootstrap_t type;
 	const char *key;
 	const char *info;
 } rpc_supp_dpp_bootstrap_gen_t;
@@ -307,7 +309,8 @@ typedef struct {
 	uint32_t duration;
 } event_heartbeat_t;
 
-typedef struct {
+typedef union {
+	int32_t h_event_id;
 	int32_t wifi_event_id;
 } event_wifi_simple_t;
 
@@ -436,7 +439,7 @@ typedef struct Ctrl_cmd_t {
 	void * rx_sem;
 
 	union {
-		wifi_init_config_t          wifi_init_config;
+		h_wifi_init_config_t        wifi_init_config;
 		wifi_cfg_t                  wifi_config;
 		rpc_wifi_scan_params_t      wifi_scan_params;
 		wifi_mac_t                  wifi_mac;
@@ -453,13 +456,13 @@ typedef struct Ctrl_cmd_t {
 
 		wifi_scan_cfg_t             wifi_scan_config;
 
-		wifi_ap_record_t            wifi_ap_record;
+		h_wifi_ap_record_t          wifi_ap_record;
 
 		wifi_scan_ap_list_t         wifi_scan_ap_list;
 
 		wifi_deauth_sta_t           wifi_deauth_sta;
 
-		wifi_storage_t              wifi_storage;
+		h_wifi_storage_t            wifi_storage;
 
 		rpc_wifi_bandwidth_t        wifi_bandwidth;
 
@@ -506,11 +509,7 @@ typedef struct Ctrl_cmd_t {
 #if H_WIFI_HE_SUPPORT
 		wifi_twt_config_t           wifi_twt_config;
 
-#if H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3
-		wifi_itwt_setup_config_t    wifi_itwt_setup_config;
-#else
-		wifi_twt_setup_config_t     wifi_twt_setup_config;
-#endif
+		h_wifi_twt_setup_config_t   wifi_itwt_setup_config;
 
 		int                         wifi_itwt_flow_id;
 
@@ -547,26 +546,26 @@ typedef struct Ctrl_cmd_t {
 
 		event_wifi_simple_t         e_wifi_simple;
 
-		esp_hosted_event_mem_info_t  e_mem_info;
+		h_event_hosted_mem_info_t  e_mem_info;
 
-		wifi_event_ap_staconnected_t e_wifi_ap_staconnected;
+		h_event_wifi_ap_staconnected_t e_wifi_ap_staconnected;
 
-		wifi_event_ap_stadisconnected_t e_wifi_ap_stadisconnected;
+		h_event_wifi_ap_stadisconnected_t e_wifi_ap_stadisconnected;
 
-		wifi_event_sta_scan_done_t   e_wifi_sta_scan_done;
+		h_event_wifi_sta_scan_done_t   e_wifi_sta_scan_done;
 
-		wifi_event_sta_connected_t   e_wifi_sta_connected;
+		h_event_wifi_sta_connected_t   e_wifi_sta_connected;
 
-		wifi_event_sta_disconnected_t e_wifi_sta_disconnected;
+		h_event_wifi_sta_disconnected_t e_wifi_sta_disconnected;
 
 #if H_WIFI_HE_SUPPORT
-		wifi_event_sta_itwt_setup_t    e_wifi_sta_itwt_setup;
+		h_event_wifi_sta_itwt_setup_t    e_wifi_sta_itwt_setup;
 
-		wifi_event_sta_itwt_teardown_t e_wifi_sta_itwt_teardown;
+		h_event_wifi_sta_itwt_teardown_t e_wifi_sta_itwt_teardown;
 
-		wifi_event_sta_itwt_suspend_t  e_wifi_sta_itwt_suspend;
+		h_event_wifi_sta_itwt_suspend_t  e_wifi_sta_itwt_suspend;
 
-		wifi_event_sta_itwt_probe_t    e_wifi_sta_itwt_probe;
+		h_event_wifi_sta_itwt_probe_t    e_wifi_sta_itwt_probe;
 #endif
 #if H_WIFI_ENTERPRISE_SUPPORT
 		rpc_eap_identity_t            eap_identity;
@@ -600,11 +599,11 @@ typedef struct Ctrl_cmd_t {
 #endif
 #endif
 #if H_DPP_SUPPORT
-		supp_wifi_event_dpp_uri_ready_t e_dpp_uri_ready;
+		h_event_wifi_dpp_uri_ready_t e_dpp_uri_ready;
 
-		supp_wifi_event_dpp_config_received_t e_dpp_config_received;
+		h_event_wifi_dpp_config_received_t e_dpp_config_received;
 
-		supp_wifi_event_dpp_failed_t   e_dpp_failed;
+		h_event_wifi_dpp_failed_t   e_dpp_failed;
 #endif
 
 #if H_GPIO_EXPANDER_SUPPORT

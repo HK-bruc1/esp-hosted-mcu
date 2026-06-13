@@ -87,7 +87,7 @@ static ctrl_cmd_t * RPC_DEFAULT_REQ(void)
 #define RPC_SUPP_CB_QUEUE_SIZE (5)
 
 typedef struct {
-	esp_supp_dpp_event_t dpp_event;
+	h_supp_dpp_event_t dpp_event;
 	int dpp_reason; // to avoid doing malloc(sizeof(int)) as dpp_data
 	void * dpp_data;
 } supp_cb_queue_item_t;
@@ -100,11 +100,21 @@ static h_err_t rpc_supp_cb_thread_start(void);
 static h_err_t rpc_supp_cb_thread_stop(void);
 
 // evt_cb triggered when we receive a DPP callback event
-static esp_supp_dpp_event_cb_t dpp_evt_cb = NULL;
+static h_supp_dpp_event_cb_t dpp_evt_cb = NULL;
 #endif
 
 static volatile bool netif_started = false;
 static volatile bool netif_connected = false;
+
+static bool h_mac_is_nonzero(const uint8_t mac[6])
+{
+	for (int i = 0; i < 6; i++) {
+		if (mac[i] != 0) {
+			return true;
+		}
+	}
+	return false;
+}
 
 typedef struct {
 	int event;
@@ -175,84 +185,83 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 			h_event_post(H_EVENT_HOSTED, H_EVENT_HOSTED_CP_HEARTBEAT, &event, sizeof(event));
 			break;
 		} case RPC_ID__Event_AP_StaConnected: {
-			wifi_event_ap_staconnected_t *p_e = &app_event->u.e_wifi_ap_staconnected;
-			if (strlen((char*)p_e->mac)) {
+			h_event_wifi_ap_staconnected_t *p_e = &app_event->u.e_wifi_ap_staconnected;
+			if (h_mac_is_nonzero(p_e->mac)) {
 				H_LOGI(TAG, "ESP Event: SoftAP mode: station connected with MAC Addr " MACSTR, MAC2STR(p_e->mac));
-				h_event_wifi_post(WIFI_EVENT_AP_STACONNECTED,
-					p_e, sizeof(wifi_event_ap_staconnected_t), H_BLOCK_MAX);
+				h_event_wifi_post(H_EVENT_WIFI_AP_STACONNECTED,
+					p_e, sizeof(*p_e), H_BLOCK_MAX);
 			}
 			break;
 		} case RPC_ID__Event_AP_StaDisconnected: {
-			wifi_event_ap_stadisconnected_t *p_e = &app_event->u.e_wifi_ap_stadisconnected;
-			if (strlen((char*)p_e->mac)) {
+			h_event_wifi_ap_stadisconnected_t *p_e = &app_event->u.e_wifi_ap_stadisconnected;
+			if (h_mac_is_nonzero(p_e->mac)) {
 				H_LOGI(TAG, "ESP Event: SoftAP mode: disconnected station");
-				h_event_wifi_post(WIFI_EVENT_AP_STADISCONNECTED,
-					p_e, sizeof(wifi_event_ap_stadisconnected_t), H_BLOCK_MAX);
+				h_event_wifi_post(H_EVENT_WIFI_AP_STADISCONNECTED,
+					p_e, sizeof(*p_e), H_BLOCK_MAX);
 			}
 			break;
 		} case RPC_ID__Event_StaConnected: {
 			H_LOGI(TAG, "ESP Event: Station mode: Connected");
 
-			wifi_event_sta_connected_t *p_e = &app_event->u.e_wifi_sta_connected;
+			h_event_wifi_sta_connected_t *p_e = &app_event->u.e_wifi_sta_connected;
 
 			if (!netif_connected && netif_started) {
-				h_event_wifi_post(WIFI_EVENT_STA_CONNECTED,
-					p_e, sizeof(wifi_event_sta_connected_t), H_BLOCK_MAX);
+				h_event_wifi_post(H_EVENT_WIFI_STA_CONNECTED,
+					p_e, sizeof(*p_e), H_BLOCK_MAX);
 				netif_connected = true;
 			}
 			break;
 		} case RPC_ID__Event_StaDisconnected: {
 			H_LOGI(TAG, "ESP Event: Station mode: Disconnected");
-			wifi_event_sta_disconnected_t *p_e = &app_event->u.e_wifi_sta_disconnected;
-			h_event_wifi_post(WIFI_EVENT_STA_DISCONNECTED,
-				p_e, sizeof(wifi_event_sta_disconnected_t), H_BLOCK_MAX);
+			h_event_wifi_sta_disconnected_t *p_e = &app_event->u.e_wifi_sta_disconnected;
+			h_event_wifi_post(H_EVENT_WIFI_STA_DISCONNECTED,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			netif_connected = false;
 			break;
 #if H_WIFI_HE_SUPPORT
 		} case RPC_ID__Event_StaItwtSetup: {
 			H_LOGV(TAG, "ESP Event: iTWT: Setup");
-			wifi_event_sta_itwt_setup_t *p_e = &app_event->u.e_wifi_sta_itwt_setup;
-			h_event_wifi_post(WIFI_EVENT_ITWT_SETUP,
-				p_e, sizeof(wifi_event_sta_itwt_setup_t), H_BLOCK_MAX);
+			h_event_wifi_sta_itwt_setup_t *p_e = &app_event->u.e_wifi_sta_itwt_setup;
+			h_event_wifi_post(H_EVENT_WIFI_ITWT_SETUP,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 		} case RPC_ID__Event_StaItwtTeardown: {
 			H_LOGV(TAG, "ESP Event: iTWT: Teardown");
-			wifi_event_sta_itwt_teardown_t *p_e = &app_event->u.e_wifi_sta_itwt_teardown;
-			h_event_wifi_post(WIFI_EVENT_ITWT_TEARDOWN,
-				p_e, sizeof(wifi_event_sta_itwt_teardown_t), H_BLOCK_MAX);
+			h_event_wifi_sta_itwt_teardown_t *p_e = &app_event->u.e_wifi_sta_itwt_teardown;
+			h_event_wifi_post(H_EVENT_WIFI_ITWT_TEARDOWN,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 		} case RPC_ID__Event_StaItwtSuspend: {
 			H_LOGV(TAG, "ESP Event: iTWT: Suspend");
-			wifi_event_sta_itwt_suspend_t *p_e = &app_event->u.e_wifi_sta_itwt_suspend;
-			h_event_wifi_post(WIFI_EVENT_ITWT_SUSPEND,
-				p_e, sizeof(wifi_event_sta_itwt_suspend_t), H_BLOCK_MAX);
+			h_event_wifi_sta_itwt_suspend_t *p_e = &app_event->u.e_wifi_sta_itwt_suspend;
+			h_event_wifi_post(H_EVENT_WIFI_ITWT_SUSPEND,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 		} case RPC_ID__Event_StaItwtProbe: {
 			H_LOGV(TAG, "ESP Event: iTWT: Probe");
-			wifi_event_sta_itwt_probe_t *p_e = &app_event->u.e_wifi_sta_itwt_probe;
-			h_event_wifi_post(WIFI_EVENT_ITWT_PROBE,
-				p_e, sizeof(wifi_event_sta_itwt_probe_t), H_BLOCK_MAX);
+			h_event_wifi_sta_itwt_probe_t *p_e = &app_event->u.e_wifi_sta_itwt_probe;
+			h_event_wifi_post(H_EVENT_WIFI_ITWT_PROBE,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 #endif // H_WIFI_HE_SUPPORT
 #if H_WIFI_DPP_SUPPORT
 		} case RPC_ID__Event_WifiDppUriReady: {
 			H_LOGV(TAG, "ESP Event: DPP: URI Ready");
-			supp_wifi_event_dpp_uri_ready_t *p_e = &app_event->u.e_dpp_uri_ready;
-			int len = p_e->uri_data_len;
-			h_event_wifi_post(WIFI_EVENT_DPP_URI_READY,
-				p_e, sizeof(wifi_event_sta_itwt_probe_t) + len, H_BLOCK_MAX);
+			h_event_wifi_dpp_uri_ready_t *p_e = &app_event->u.e_dpp_uri_ready;
+			h_event_wifi_post(H_EVENT_WIFI_DPP_URI_READY,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 		} case RPC_ID__Event_WifiDppCfgRecvd: {
 			H_LOGV(TAG, "ESP Event: DPP: CFG Received");
-			supp_wifi_event_dpp_config_received_t *p_e = &app_event->u.e_dpp_config_received;
-			h_event_wifi_post(WIFI_EVENT_DPP_CFG_RECVD,
-				p_e, sizeof(wifi_event_dpp_config_received_t), H_BLOCK_MAX);
+			h_event_wifi_dpp_config_received_t *p_e = &app_event->u.e_dpp_config_received;
+			h_event_wifi_post(H_EVENT_WIFI_DPP_CFG_RECVD,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 		} case RPC_ID__Event_WifiDppFail: {
 			H_LOGV(TAG, "ESP Event: DPP: Fail");
-			supp_wifi_event_dpp_failed_t *p_e = &app_event->u.e_dpp_failed;
-			h_event_wifi_post(WIFI_EVENT_DPP_FAILED,
-				p_e, sizeof(wifi_event_dpp_failed_t), H_BLOCK_MAX);
+			h_event_wifi_dpp_failed_t *p_e = &app_event->u.e_dpp_failed;
+			h_event_wifi_post(H_EVENT_WIFI_DPP_FAILED,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 #endif // H_WIFI_DPP_SUPPORT
 #if H_SUPP_DPP_SUPPORT
@@ -262,7 +271,7 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 				// copy the uri, push it to the queue
 				size_t len = strlen(app_event->u.e_dpp_uri_ready.uri) + 1; // include terminating NULL
 				supp_cb_queue_item_t item = { 0 };
-				item.dpp_event = ESP_SUPP_DPP_URI_READY;
+				item.dpp_event = H_SUPP_DPP_EVENT_URI_READY;
 				item.dpp_data = h_malloc(len);
 				if (item.dpp_data) {
 					h_memcpy(item.dpp_data, app_event->u.e_dpp_uri_ready.uri, len);
@@ -278,7 +287,7 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 			if (rpc_supp_cb_thread_q) {
 				// copy the wifi config, push it to the queue
 				supp_cb_queue_item_t item = { 0 };
-				item.dpp_event = ESP_SUPP_DPP_CFG_RECVD;
+				item.dpp_event = H_SUPP_DPP_EVENT_CFG_RECVD;
 				item.dpp_data = h_malloc(sizeof(h_wifi_config_t));
 				if (item.dpp_data) {
 					h_memcpy(item.dpp_data, &app_event->u.e_dpp_config_received.wifi_cfg,
@@ -295,7 +304,7 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 		} case RPC_ID__Event_SuppDppFail: {
 			if (rpc_supp_cb_thread_q) {
 				supp_cb_queue_item_t item = { 0 };
-				item.dpp_event = ESP_SUPP_DPP_FAIL;
+				item.dpp_event = H_SUPP_DPP_EVENT_FAIL;
 				item.dpp_reason = app_event->u.e_dpp_failed.failure_reason;
 				h_queue_send(rpc_supp_cb_thread_q, &item, H_BLOCK_MAX);
 			} else {
@@ -304,68 +313,68 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 			break;
 #endif // H_SUPP_DPP_SUPPORT
 		} case RPC_ID__Event_WifiEventNoArgs: {
-			int wifi_event_id = app_event->u.e_wifi_simple.wifi_event_id;
+			int h_event_id = app_event->u.e_wifi_simple.h_event_id;
 
-			switch (wifi_event_id) {
+			switch (h_event_id) {
 
-			case WIFI_EVENT_STA_START:
+			case H_EVENT_WIFI_STA_START:
 				H_LOGI(TAG, "ESP Event: wifi station started");
 				/* Trigger connection when station is started */
 				if (!netif_started && !is_wifi_netif_started(H_WIFI_IF_STA)) {
-					h_event_wifi_post(wifi_event_id, 0, 0, H_BLOCK_MAX);
+					h_event_wifi_post(h_event_id, 0, 0, H_BLOCK_MAX);
 #if H_WIFI_AUTO_CONNECT_ON_STA_START
 					rpc_wifi_connect_async();
 #endif
 					netif_started = true;
 				}
 				break;
-			case WIFI_EVENT_STA_STOP:
+			case H_EVENT_WIFI_STA_STOP:
 				H_LOGI(TAG, "ESP Event: wifi station stopped");
 				netif_started = false;
 				netif_connected = false;
-				h_event_wifi_post(wifi_event_id, 0, 0, H_BLOCK_MAX);
+				h_event_wifi_post(h_event_id, 0, 0, H_BLOCK_MAX);
 				break;
 
-			case WIFI_EVENT_AP_START:
+			case H_EVENT_WIFI_AP_START:
 				H_LOGI(TAG,"ESP Event: softap started");
 				if (!softap_started && !is_wifi_netif_started(H_WIFI_IF_AP)) {
-					h_event_wifi_post(wifi_event_id, 0, 0, H_BLOCK_MAX);
+					h_event_wifi_post(h_event_id, 0, 0, H_BLOCK_MAX);
 					softap_started = true;
 				}
 				break;
 
-			case WIFI_EVENT_AP_STOP:
+			case H_EVENT_WIFI_AP_STOP:
 				H_LOGI(TAG,"ESP Event: softap stopped");
 				softap_started = false;
-				h_event_wifi_post(wifi_event_id, 0, 0, H_BLOCK_MAX);
+				h_event_wifi_post(h_event_id, 0, 0, H_BLOCK_MAX);
 				break;
 
-			case WIFI_EVENT_HOME_CHANNEL_CHANGE:
+			case H_EVENT_WIFI_HOME_CHANNEL_CHANGE:
 				H_LOGD(TAG,"ESP Event: Home channel changed");
-				h_event_wifi_post(wifi_event_id, 0, 0, H_BLOCK_MAX);
+				h_event_wifi_post(h_event_id, 0, 0, H_BLOCK_MAX);
 				break;
 
-			case WIFI_EVENT_AP_STACONNECTED:
+			case H_EVENT_WIFI_AP_STACONNECTED:
 				// should be RPC_ID__Event_AP_StaConnected
 				H_LOGE(TAG,"Incorrect ESP Event: softap station connected");
 				break;
 
-			case WIFI_EVENT_AP_STADISCONNECTED:
+			case H_EVENT_WIFI_AP_STADISCONNECTED:
 				// should be RPC_ID__Event_AP_StaDisconnected
 				H_LOGE(TAG,"Incorrect ESP Event: softap station disconnected");
 				break;
 
 			default:
-				H_LOGV(TAG, "ESP Event: Event[%x]", wifi_event_id);
+				H_LOGV(TAG, "ESP Event: Event[%x]", h_event_id);
 				break;
 			} /* inner switch case */
 			break;
 		} case RPC_ID__Event_StaScanDone: {
-			wifi_event_sta_scan_done_t *p_e = &app_event->u.e_wifi_sta_scan_done;
+			h_event_wifi_sta_scan_done_t *p_e = &app_event->u.e_wifi_sta_scan_done;
 			H_LOGI(TAG, "ESP Event: StaScanDone");
 			H_LOGV(TAG, "scan: status: %lu number:%u scan_id:%u", p_e->status, p_e->number, p_e->scan_id);
-			h_event_wifi_post(WIFI_EVENT_SCAN_DONE,
-				p_e, sizeof(wifi_event_sta_scan_done_t), H_BLOCK_MAX);
+			h_event_wifi_post(H_EVENT_WIFI_SCAN_DONE,
+				p_e, sizeof(*p_e), H_BLOCK_MAX);
 			break;
 		} case RPC_ID__Event_DhcpDnsStatus: {
 			rpc_set_dhcp_dns_status_t *p_e = &app_event->u.slave_dhcp_dns_status;
@@ -1107,11 +1116,7 @@ h_err_t rpc_wifi_sta_twt_config(wifi_twt_config_t *config)
 	return rpc_rsp_callback(resp);
 }
 
-#if H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3
-h_err_t rpc_wifi_sta_itwt_setup(wifi_itwt_setup_config_t *setup_config)
-#else
-h_err_t rpc_wifi_sta_itwt_setup(wifi_twt_setup_config_t *setup_config)
-#endif
+h_err_t rpc_wifi_sta_itwt_setup(h_wifi_twt_setup_config_t *setup_config)
 {
 	if (!setup_config)
 		return H_ERR_INVALID_ARG;
@@ -1120,11 +1125,7 @@ h_err_t rpc_wifi_sta_itwt_setup(wifi_twt_setup_config_t *setup_config)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-#if H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3
-	h_memcpy(&req->u.wifi_itwt_setup_config, setup_config, sizeof(wifi_itwt_setup_config_t));
-#else
-	h_memcpy(&req->u.wifi_twt_setup_config, setup_config, sizeof(wifi_twt_setup_config_t));
-#endif
+	h_memcpy(&req->u.wifi_itwt_setup_config, setup_config, sizeof(h_wifi_twt_setup_config_t));
 	resp = rpc_slaveif_wifi_sta_itwt_setup(req);
 	return rpc_rsp_callback(resp);
 }
@@ -1357,7 +1358,7 @@ int rpc_wifi_init(const h_wifi_init_config_t *arg)
 
 	req->rsp_timeout_sec = WIFI_INIT_RSP_TIMEOUT_SEC;
 
-	h_wifi_init_config_to_req(arg, &req->u.wifi_init_config);
+	req->u.wifi_init_config = *arg;
 
 #if H_WIFI_NVS_ENABLED
 	req->u.wifi_init_config.nvs_enable = YES;
@@ -1541,7 +1542,7 @@ int rpc_wifi_scan_start(const h_wifi_scan_config_t *config, bool block)
 	ctrl_cmd_t *resp = NULL;
 
 	if (config) {
-		h_wifi_scan_config_to_req(config, &req->u.wifi_scan_config.cfg);
+		req->u.wifi_scan_config.cfg = *config;
 		req->u.wifi_scan_config.cfg_set = 1;
 	}
 
@@ -1594,7 +1595,7 @@ int rpc_wifi_scan_get_ap_record(h_wifi_ap_record_t *ap_record)
 
 	resp = rpc_slaveif_wifi_scan_get_ap_record(req);
 	if (resp && resp->resp_event_status == SUCCESS) {
-		h_wifi_ap_record_from_resp(&resp->u.wifi_ap_record, ap_record);
+		*ap_record = resp->u.wifi_ap_record;
 	}
 	return rpc_rsp_callback(resp);
 }
@@ -1616,7 +1617,7 @@ int rpc_wifi_scan_get_ap_records(uint16_t *number, h_wifi_ap_record_t *ap_record
 		H_LOGV(TAG, "num: %u",resp->u.wifi_scan_ap_list.number);
 		*number = resp->u.wifi_scan_ap_list.number;
 		for (uint16_t i = 0; i < resp->u.wifi_scan_ap_list.number; i++) {
-			h_wifi_ap_record_from_resp_list(&resp->u.wifi_scan_ap_list.out_list[i], &ap_records[i]);
+			ap_records[i] = resp->u.wifi_scan_ap_list.out_list[i];
 		}
 	}
 	return rpc_rsp_callback(resp);
@@ -1676,7 +1677,7 @@ int rpc_wifi_sta_get_ap_info(h_wifi_ap_record_t *ap_info)
 	resp = rpc_slaveif_wifi_sta_get_ap_info(req);
 
 	if (resp && resp->resp_event_status == SUCCESS) {
-		h_wifi_ap_record_from_resp_list(&resp->u.wifi_scan_ap_list.out_list[0], ap_info);
+		*ap_info = resp->u.wifi_scan_ap_list.out_list[0];
 	}
 	return rpc_rsp_callback(resp);
 }
@@ -1713,7 +1714,7 @@ int rpc_wifi_get_ps(h_wifi_ps_type_t *type)
 	return rpc_rsp_callback(resp);
 }
 
-int rpc_wifi_set_storage(wifi_storage_t storage)
+int rpc_wifi_set_storage(h_wifi_storage_t storage)
 {
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
@@ -2264,7 +2265,7 @@ h_err_t rpc_eap_client_set_eap_methods(esp_eap_method_t methods)
 
 #if H_DPP_SUPPORT
 #if H_SUPP_DPP_SUPPORT
-h_err_t rpc_supp_dpp_init(esp_supp_dpp_event_cb_t evt_cb)
+h_err_t rpc_supp_dpp_init(h_supp_dpp_event_cb_t evt_cb)
 {
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
@@ -2321,7 +2322,7 @@ h_err_t rpc_supp_dpp_deinit(void)
 }
 
 h_err_t rpc_supp_dpp_bootstrap_gen(const char *chan_list,
-		esp_supp_dpp_bootstrap_t type,
+		h_supp_dpp_bootstrap_t type,
 		const char *key, const char *info)
 {
 	// key and info are optional parameters
@@ -2463,7 +2464,7 @@ static void rpc_supp_thread(void *arg)
 		}
 		// trigger the callback with the data;
 		if (dpp_evt_cb) {
-			if (item.dpp_event == ESP_SUPP_DPP_FAIL) {
+			if (item.dpp_event == H_SUPP_DPP_EVENT_FAIL) {
 				// user cb expected to cast provided data back to a int
 				// see https://github.com/espressif/esp-idf/blob/7912b04e6bdf8c9aeea88baff9e46794d04e4200/examples/wifi/wifi_easy_connect/dpp-enrollee/main/dpp_enrollee_main.c#L96
 				dpp_evt_cb(item.dpp_event, (void *)item.dpp_reason);

@@ -7,9 +7,9 @@
 #include "h_wrapper.h"
 #include "rpc_utils.h"
 #include "h_rpc_core.h"
-#include "esp_hosted_bitmasks.h"
 
 #include "h_config.h"
+#include "esp_hosted_bitmasks.h"
 
 static const char *TAG = "rpc_utils";
 

@@ -10,9 +10,8 @@
 #include "esp_private/wifi.h"
 
 #include "esp_hosted_transport_init.h"
-#include "esp_hosted_bitmasks.h"
-
 #include "slave_wifi_std.h"
+#include "esp_hosted_bitmasks.h"
 #include "slave_control.h"
 
 #if CONFIG_SOC_WIFI_HE_SUPPORT

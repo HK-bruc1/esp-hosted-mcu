@@ -11,7 +11,6 @@
 #include "h_wrapper.h"
 #include "esp_hosted_transport.h"
 #include "esp_hosted_bitmasks.h"
-// REMOVED: esp_idf_version.h
 
 static const char *TAG = "rpc_req";
 
@@ -185,38 +184,26 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 		}
 		break;
 	} case RPC_ID__Req_WifiInit: {
-		wifi_init_config_t * p_a = &app_req->u.wifi_init_config;
+		h_wifi_init_config_t * p_a = &app_req->u.wifi_init_config;
 		RPC_ALLOC_ASSIGN(RpcReqWifiInit, req_wifi_init,
 				rpc__req__wifi_init__init);
 		RPC_ALLOC_ELEMENT(WifiInitConfig, req_payload->cfg, wifi_init_config__init);
 
 		req_payload->cfg->static_rx_buf_num      = p_a->static_rx_buf_num       ;
-		req_payload->cfg->dynamic_rx_buf_num     = p_a->dynamic_rx_buf_num      ;
-		req_payload->cfg->tx_buf_type            = p_a->tx_buf_type             ;
+		req_payload->cfg->dynamic_rx_buf_num     = p_a->rx_buf_num              ;
 		req_payload->cfg->static_tx_buf_num      = p_a->static_tx_buf_num       ;
-		req_payload->cfg->dynamic_tx_buf_num     = p_a->dynamic_tx_buf_num      ;
-		req_payload->cfg->rx_mgmt_buf_type       = p_a->rx_mgmt_buf_type        ;
-		req_payload->cfg->rx_mgmt_buf_num        = p_a->rx_mgmt_buf_num         ;
+		req_payload->cfg->dynamic_tx_buf_num     = p_a->tx_buf_num              ;
 		req_payload->cfg->cache_tx_buf_num       = p_a->cache_tx_buf_num        ;
 		req_payload->cfg->csi_enable             = p_a->csi_enable              ;
 		req_payload->cfg->ampdu_rx_enable        = p_a->ampdu_rx_enable         ;
 		req_payload->cfg->ampdu_tx_enable        = p_a->ampdu_tx_enable         ;
-		req_payload->cfg->amsdu_tx_enable        = p_a->amsdu_tx_enable         ;
 		req_payload->cfg->nvs_enable             = p_a->nvs_enable              ;
 		req_payload->cfg->nano_enable            = p_a->nano_enable             ;
-		req_payload->cfg->rx_ba_win              = p_a->rx_ba_win               ;
+		req_payload->cfg->rx_ba_win              = p_a->rx_ba_win_num           ;
 		req_payload->cfg->wifi_task_core_id      = p_a->wifi_task_core_id       ;
-		req_payload->cfg->beacon_max_len         = p_a->beacon_max_len          ;
 		req_payload->cfg->feature_caps           = p_a->feature_caps            ;
-		req_payload->cfg->mgmt_sbuf_num          = p_a->mgmt_sbuf_num           ;
-		req_payload->cfg->sta_disconnected_pm    = p_a->sta_disconnected_pm     ;
-		req_payload->cfg->espnow_max_encrypt_num = p_a->espnow_max_encrypt_num  ;
-		req_payload->cfg->tx_hetb_queue_num      = p_a->tx_hetb_queue_num       ;
-		req_payload->cfg->dump_hesigb_enable     = p_a->dump_hesigb_enable      ;
+		req_payload->cfg->mgmt_sbuf_num          = p_a->sta_mgmt_buf            ;
 		req_payload->cfg->magic                  = p_a->magic                   ;
-
-		/* uint64 - TODO: portable? */
-		req_payload->cfg->feature_caps = p_a->feature_caps                      ;
 		break;
     } case RPC_ID__Req_WifiGetConfig: {
 		wifi_cfg_t * p_a = &app_req->u.wifi_config;
@@ -405,7 +392,7 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 		break;
 
     } case RPC_ID__Req_WifiScanStart: {
-		wifi_scan_config_t * p_a = &app_req->u.wifi_scan_config.cfg;
+		h_wifi_scan_config_t * p_a = &app_req->u.wifi_scan_config.cfg;
 
 		RPC_ALLOC_ASSIGN(RpcReqWifiScanStart, req_wifi_scan_start,
 				rpc__req__wifi_scan_start__init);
@@ -421,25 +408,26 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 
 			WifiScanConfig *p_c = req_payload->config;
 			WifiScanTime *p_c_st = NULL;
-			wifi_scan_time_t *p_a_st = &p_a->scan_time;
 
-			RPC_REQ_COPY_STR(p_c->ssid, p_a->ssid, SSID_LENGTH);
-			RPC_REQ_COPY_STR(p_c->bssid, p_a->bssid, MAC_SIZE_BYTES);
+			if (p_a->ssid) {
+				size_t ssid_len = p_a->ssid_len ? p_a->ssid_len :
+						H_MIN(strlen((char *)p_a->ssid) + 1, SSID_LENGTH);
+				RPC_REQ_COPY_BYTES(p_c->ssid, p_a->ssid,
+						H_MIN(ssid_len, SSID_LENGTH));
+			}
+			if (p_a->bssid) {
+				RPC_REQ_COPY_BYTES(p_c->bssid, p_a->bssid, MAC_SIZE_BYTES);
+			}
 			p_c->channel = p_a->channel;
 			p_c->show_hidden = p_a->show_hidden;
-			p_c->scan_type = p_a->scan_type;
 
 			p_c_st = p_c->scan_time;
 
-			p_c_st->passive = p_a_st->passive;
-			p_c_st->active->min = p_a_st->active.min ;
-			p_c_st->active->max = p_a_st->active.max ;
+			p_c_st->passive = p_a->passive_scan_time;
+			p_c_st->active->min = p_a->active_scan_min_time ;
+			p_c_st->active->max = p_a->active_scan_max_time ;
 
 			p_c->home_chan_dwell_time = p_a->home_chan_dwell_time;
-
-			RPC_ALLOC_ELEMENT(WifiScanChannelBitmap, p_c->channel_bitmap, wifi_scan_channel_bitmap__init);
-			p_c->channel_bitmap->ghz_2_channels = p_a->channel_bitmap.ghz_2_channels;
-			p_c->channel_bitmap->ghz_5_channels = p_a->channel_bitmap.ghz_5_channels;
 
 			req_payload->config_set = 1;
 		}
@@ -458,7 +446,7 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 		req_payload->aid = app_req->u.wifi_deauth_sta.aid;
 		break;
 	} case RPC_ID__Req_WifiSetStorage: {
-		wifi_storage_t * p = &app_req->u.wifi_storage;
+		h_wifi_storage_t * p = &app_req->u.wifi_storage;
 		RPC_ALLOC_ASSIGN(RpcReqWifiSetStorage, req_wifi_set_storage,
 				rpc__req__wifi_set_storage__init);
 		req_payload->storage = *p;
@@ -544,11 +532,7 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 		RPC_ALLOC_ASSIGN(RpcReqWifiStaItwtSetup, req_wifi_sta_itwt_setup,
 				rpc__req__wifi_sta_itwt_setup__init);
 		RPC_ALLOC_ELEMENT(WifiItwtSetupConfig, req_payload->setup_config, wifi_itwt_setup_config__init);
-#if H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3
-		wifi_itwt_setup_config_t * p_a_cfg = &app_req->u.wifi_itwt_setup_config;
-#else
-		wifi_twt_setup_config_t * p_a_cfg = &app_req->u.wifi_twt_setup_config;
-#endif
+		h_wifi_twt_setup_config_t * p_a_cfg = &app_req->u.wifi_itwt_setup_config;
 		WifiItwtSetupConfig * p_c_cfg = req_payload->setup_config;
 
 		p_c_cfg->setup_cmd = p_a_cfg->setup_cmd;

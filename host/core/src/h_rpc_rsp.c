@@ -11,9 +11,8 @@
 #include "rpc_utils.h"
 #include "rpc_slave_if.h"
 #include "esp_hosted_transport.h"
-#include "esp_hosted_bitmasks.h"
-// REMOVED: esp_idf_version.h
 #include "h_config.h"
+#include "esp_hosted_bitmasks.h"
 
 static const char *TAG = "rpc_rsp";
 
@@ -48,71 +47,46 @@ static const char *TAG = "rpc_rsp";
     }                                                                         \
 }
 
-// copy the rpc record info to the wifi record info
-static int rpc_copy_ap_record(wifi_ap_record_t *ap_record, WifiApRecord *rpc_ap_record)
+// copy the rpc record info to the portable AP record info
+static int rpc_copy_ap_record(h_wifi_ap_record_t *ap_record, WifiApRecord *rpc_ap_record)
 {
 	RPC_RSP_COPY_BYTES(ap_record->ssid, rpc_ap_record->ssid);
 	RPC_RSP_COPY_BYTES(ap_record->bssid, rpc_ap_record->bssid);
+	ap_record->ssid_len = H_MIN(rpc_ap_record->ssid.len, sizeof(ap_record->ssid));
 
-	ap_record->primary         = rpc_ap_record->primary;
-	ap_record->second          = rpc_ap_record->second;
+	ap_record->primary_channel = rpc_ap_record->primary;
+	ap_record->second_channel  = rpc_ap_record->second;
 	ap_record->rssi            = rpc_ap_record->rssi;
 	ap_record->authmode        = rpc_ap_record->authmode;
 	ap_record->pairwise_cipher = rpc_ap_record->pairwise_cipher;
 	ap_record->group_cipher    = rpc_ap_record->group_cipher;
-	ap_record->ant             = rpc_ap_record->ant;
 
 	ap_record->phy_11b       = H_GET_BIT(WIFI_SCAN_AP_REC_phy_11b_BIT, rpc_ap_record->bitmask);
 	ap_record->phy_11g       = H_GET_BIT(WIFI_SCAN_AP_REC_phy_11g_BIT, rpc_ap_record->bitmask);
 	ap_record->phy_11n       = H_GET_BIT(WIFI_SCAN_AP_REC_phy_11n_BIT, rpc_ap_record->bitmask);
 	ap_record->phy_lr        = H_GET_BIT(WIFI_SCAN_AP_REC_phy_lr_BIT, rpc_ap_record->bitmask);
-	ap_record->phy_11a       = H_GET_BIT(WIFI_SCAN_AP_REC_phy_11a_BIT, rpc_ap_record->bitmask);
-	ap_record->phy_11ac      = H_GET_BIT(WIFI_SCAN_AP_REC_phy_11ac_BIT, rpc_ap_record->bitmask);
-	ap_record->phy_11ax      = H_GET_BIT(WIFI_SCAN_AP_REC_phy_11ax_BIT, rpc_ap_record->bitmask);
 	ap_record->wps           = H_GET_BIT(WIFI_SCAN_AP_REC_wps_BIT, rpc_ap_record->bitmask);
-	ap_record->ftm_responder = H_GET_BIT(WIFI_SCAN_AP_REC_ftm_responder_BIT, rpc_ap_record->bitmask);
-	ap_record->ftm_initiator = H_GET_BIT(WIFI_SCAN_AP_REC_ftm_initiator_BIT, rpc_ap_record->bitmask);
-	ap_record->reserved      = WIFI_SCAN_AP_GET_RESERVED_VAL(rpc_ap_record->bitmask);
 
-	RPC_RSP_COPY_BYTES(ap_record->country.cc, rpc_ap_record->country->cc);
-	ap_record->country.schan        = rpc_ap_record->country->schan;
-	ap_record->country.nchan        = rpc_ap_record->country->nchan;
-	ap_record->country.max_tx_power = rpc_ap_record->country->max_tx_power;
-	ap_record->country.policy       = rpc_ap_record->country->policy;
+	if (rpc_ap_record->country) {
+		RPC_RSP_COPY_BYTES(ap_record->country, rpc_ap_record->country->cc);
+		ap_record->country_len = H_MIN(rpc_ap_record->country->cc.len,
+				sizeof(ap_record->country));
+	}
 
 	H_LOGD(TAG, "SSID: %s BSSid: " MACSTR, ap_record->ssid, MAC2STR(ap_record->bssid));
 	H_LOGD(TAG, "Primary: %u Second: %u RSSI: %d Authmode: %u",
-			ap_record->primary, ap_record->second,
+			ap_record->primary_channel, ap_record->second_channel,
 			ap_record->rssi, ap_record->authmode
 			);
-	H_LOGD(TAG, "PairwiseCipher: %u Groupcipher: %u Ant: %u",
-			ap_record->pairwise_cipher, ap_record->group_cipher,
-			ap_record->ant
+	H_LOGD(TAG, "PairwiseCipher: %u Groupcipher: %u",
+			ap_record->pairwise_cipher, ap_record->group_cipher
 			);
-	H_LOGD(TAG, "Bitmask: 11b:%u g:%u n:%u ax: %u lr:%u wps:%u ftm_resp:%u ftm_ini:%u res: %u",
+	H_LOGD(TAG, "Bitmask: 11b:%u g:%u n:%u lr:%u wps:%u",
 			ap_record->phy_11b, ap_record->phy_11g,
-			ap_record->phy_11n, ap_record->phy_11ax, ap_record->phy_lr,
-			ap_record->wps, ap_record->ftm_responder,
-			ap_record->ftm_initiator, ap_record->reserved
+			ap_record->phy_11n, ap_record->phy_lr, ap_record->wps
 			);
-	H_LOGD(TAG, "Country cc:%c%c schan: %u nchan: %u max_tx_pow: %d policy: %u",
-			ap_record->country.cc[0], ap_record->country.cc[1], ap_record->country.schan,
-			ap_record->country.nchan, ap_record->country.max_tx_power,
-			ap_record->country.policy);
-
-	WifiHeApInfo *p_c_he_ap = rpc_ap_record->he_ap;
-	wifi_he_ap_info_t *p_a_he_ap = &ap_record->he_ap;
-	// six bits
-	p_a_he_ap->bss_color = p_c_he_ap->bitmask & 0x3F;
-	p_a_he_ap->partial_bss_color = H_GET_BIT(WIFI_HE_AP_INFO_partial_bss_color_BIT, p_c_he_ap->bitmask);
-	p_a_he_ap->bss_color_disabled = H_GET_BIT(WIFI_HE_AP_INFO_bss_color_disabled_BIT, p_c_he_ap->bitmask);
-
-	H_LOGD(TAG, "HE_AP: bss_color %d, partial_bss_color %d, bss_color_disabled %d",
-			p_a_he_ap->bss_color, p_a_he_ap->bss_color_disabled, p_a_he_ap->bss_color_disabled);
-
-	ap_record->bandwidth    = rpc_ap_record->bandwidth;
-	ap_record->vht_ch_freq1 = rpc_ap_record->vht_ch_freq1;
-	ap_record->vht_ch_freq2 = rpc_ap_record->vht_ch_freq2;
+	H_LOGD(TAG, "Country cc:%c%c",
+			ap_record->country[0], ap_record->country[1]);
 
 	return 0;
 }
@@ -325,7 +299,7 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 		break;
 	} case RPC_ID__Resp_WifiScanGetApRecords: {
 		wifi_scan_ap_list_t *p_a = &(app_resp->u.wifi_scan_ap_list);
-		wifi_ap_record_t *list = NULL;
+		h_wifi_ap_record_t *list = NULL;
 		WifiApRecord **p_c_list = NULL;
 
 		RPC_FAIL_ON_NULL(resp_wifi_scan_get_ap_records);
@@ -343,8 +317,8 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 
 		RPC_FAIL_ON_NULL(resp_wifi_scan_get_ap_records->ap_records);
 
-		list = (wifi_ap_record_t*)h_calloc(p_a->number,
-				sizeof(wifi_ap_record_t));
+		list = (h_wifi_ap_record_t*)h_calloc(p_a->number,
+				sizeof(h_wifi_ap_record_t));
 		p_a->out_list = list;
 
 		RPC_FAIL_ON_NULL_PRINT(list, "Malloc Failed");
@@ -359,7 +333,7 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 		break;
 	} case RPC_ID__Resp_WifiStaGetApInfo: {
 		WifiApRecord *p_c = NULL;
-		wifi_ap_record_t *ap_info = NULL;
+		h_wifi_ap_record_t *ap_info = NULL;
 		wifi_scan_ap_list_t *p_a = &(app_resp->u.wifi_scan_ap_list);
 
 		RPC_FAIL_ON_NULL(resp_wifi_sta_get_ap_info);
@@ -370,8 +344,8 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 
 		RPC_FAIL_ON_NULL(resp_wifi_sta_get_ap_info->ap_record);
 
-		ap_info = (wifi_ap_record_t*)h_calloc(p_a->number,
-				sizeof(wifi_ap_record_t));
+		ap_info = (h_wifi_ap_record_t*)h_calloc(p_a->number,
+				sizeof(h_wifi_ap_record_t));
 		p_a->out_list = ap_info;
 
 		RPC_FAIL_ON_NULL_PRINT(ap_info, "Malloc Failed");

@@ -14,6 +14,7 @@ extern "C" {
 
 /** Includes **/
 #include "h_wifi_types.h"
+#include "h_dpp_types.h"
 
 #if defined(ESP_PLATFORM) && (ESP_PLATFORM)
 #include "h_port_config.h"
@@ -81,7 +82,7 @@ esp_err_t rpc_wifi_deauth_sta(uint16_t aid);
 esp_err_t rpc_wifi_sta_get_ap_info(h_wifi_ap_record_t *ap_info);
 esp_err_t rpc_wifi_set_ps(h_wifi_ps_type_t type);
 esp_err_t rpc_wifi_get_ps(h_wifi_ps_type_t *type);
-esp_err_t rpc_wifi_set_storage(wifi_storage_t storage);
+esp_err_t rpc_wifi_set_storage(h_wifi_storage_t storage);
 esp_err_t rpc_wifi_set_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t bw);
 esp_err_t rpc_wifi_get_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t *bw);
 esp_err_t rpc_wifi_set_channel(uint8_t primary, wifi_second_chan_t second);
@@ -134,11 +135,7 @@ esp_err_t rpc_ota_activate(void);
 
 #if H_WIFI_HE_SUPPORT
 esp_err_t rpc_wifi_sta_twt_config(wifi_twt_config_t *config);
-#if H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3
-esp_err_t rpc_wifi_sta_itwt_setup(wifi_itwt_setup_config_t *setup_config);
-#else
-esp_err_t rpc_wifi_sta_itwt_setup(wifi_twt_setup_config_t *setup_config);
-#endif
+esp_err_t rpc_wifi_sta_itwt_setup(h_wifi_twt_setup_config_t *setup_config);
 esp_err_t rpc_wifi_sta_itwt_teardown(int flow_id);
 esp_err_t rpc_wifi_sta_itwt_suspend(int flow_id, int suspend_time_ms);
 esp_err_t rpc_wifi_sta_itwt_get_flow_id_status(int *flow_id_bitmap);
@@ -194,13 +191,13 @@ esp_err_t rpc_eap_client_set_eap_methods(esp_eap_method_t methods);
 #endif
 #if H_DPP_SUPPORT
 #if H_SUPP_DPP_SUPPORT
-esp_err_t rpc_supp_dpp_init(esp_supp_dpp_event_cb_t evt_cb);
+esp_err_t rpc_supp_dpp_init(h_supp_dpp_event_cb_t evt_cb);
 #else
 esp_err_t rpc_supp_dpp_init(void);
 #endif
 esp_err_t rpc_supp_dpp_deinit(void);
 esp_err_t rpc_supp_dpp_bootstrap_gen(const char *chan_list,
-		esp_supp_dpp_bootstrap_t type,
+		h_supp_dpp_bootstrap_t type,
 		const char *key, const char *info);
 esp_err_t rpc_supp_dpp_start_listen(void);
 esp_err_t rpc_supp_dpp_stop_listen(void);

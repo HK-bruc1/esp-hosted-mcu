@@ -429,7 +429,7 @@ esp_err_t esp_wifi_remote_get_ps(wifi_ps_type_t *type)
 esp_err_t esp_wifi_remote_set_storage(wifi_storage_t storage)
 {
 	check_transport_up();
-	return rpc_wifi_set_storage(storage);
+	return rpc_wifi_set_storage((h_wifi_storage_t)storage);
 }
 
 esp_err_t esp_wifi_remote_set_bandwidth(wifi_interface_t ifx, wifi_bandwidth_t bw)
@@ -578,7 +578,7 @@ esp_err_t esp_wifi_remote_sta_itwt_setup(wifi_twt_setup_config_t *setup_config)
 #endif
 {
 	check_transport_up();
-	return rpc_wifi_sta_itwt_setup(setup_config);
+	return rpc_wifi_sta_itwt_setup((h_wifi_twt_setup_config_t *)setup_config);
 }
 
 esp_err_t esp_wifi_remote_sta_itwt_teardown(int flow_id)
@@ -668,7 +668,7 @@ esp_err_t esp_wifi_remote_get_bandwidths(wifi_interface_t ifx, wifi_bandwidths_t
 esp_err_t esp_supp_remote_dpp_init(esp_supp_dpp_event_cb_t evt_cb)
 {
 	check_transport_up();
-	return rpc_supp_dpp_init(evt_cb);
+	return rpc_supp_dpp_init((h_supp_dpp_event_cb_t)evt_cb);
 }
 #else
 esp_err_t esp_supp_remote_dpp_init(void)
@@ -689,7 +689,7 @@ esp_err_t esp_supp_remote_dpp_bootstrap_gen(const char *chan_list,
 		const char *key, const char *info)
 {
 	check_transport_up();
-	return rpc_supp_dpp_bootstrap_gen(chan_list, type, key, info);
+	return rpc_supp_dpp_bootstrap_gen(chan_list, (h_supp_dpp_bootstrap_t)type, key, info);
 }
 
 esp_err_t esp_supp_remote_dpp_start_listen(void)

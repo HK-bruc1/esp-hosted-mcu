@@ -9,11 +9,25 @@
 #ifndef __ESP_HOSTED_BITMASKS__H
 #define __ESP_HOSTED_BITMASKS__H
 
-#include "esp_idf_version.h"
-
 #define H_SET_BIT(pos, val)                       (val|=(1<<pos))
 
 #define H_GET_BIT(pos, val)                       (val&(1<<pos)? 1: 0)
+
+/* Keep this common wire-format header free of ESP-IDF includes.  Host ports
+ * should provide H_PRESENT_IN_ESP_IDF_5_5_0 through h_config/h_port_config.
+ * ESP-IDF-only callers that already provided ESP_IDF_VERSION are still
+ * supported through the fallback below. */
+#ifndef H_PRESENT_IN_ESP_IDF_5_5_0
+# if defined(ESP_IDF_VERSION) && defined(ESP_IDF_VERSION_VAL)
+#  if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+#   define H_PRESENT_IN_ESP_IDF_5_5_0 1
+#  else
+#   define H_PRESENT_IN_ESP_IDF_5_5_0 0
+#  endif
+# else
+#  define H_PRESENT_IN_ESP_IDF_5_5_0 0
+# endif
+#endif
 
 enum {
 	WIFI_SCAN_AP_REC_phy_11b_BIT       = 0,
@@ -98,20 +112,20 @@ enum {
 	WIFI_STA_CONFIG_2_he_trig_su_bmforming_feedback_disabled_BIT         = 7,
 	WIFI_STA_CONFIG_2_he_trig_mu_bmforming_partial_feedback_disabled_BIT = 8,
 	WIFI_STA_CONFIG_2_he_trig_cqi_feedback_disabled_BIT                  = 9,
-#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
-	WIFI_STA_CONFIG_2_MAX_USED_BIT                                       = 10,
-#else
+#if H_PRESENT_IN_ESP_IDF_5_5_0
 	WIFI_STA_CONFIG_2_vht_su_beamformee_disabled                         = 10,
 	WIFI_STA_CONFIG_2_vht_mu_beamformee_disabled                         = 11,
 	WIFI_STA_CONFIG_2_vht_mcs8_enabled                                   = 12,
 	WIFI_STA_CONFIG_2_MAX_USED_BIT                                       = 13,
+#else
+	WIFI_STA_CONFIG_2_MAX_USED_BIT                                       = 10,
 #endif
 };
 
-#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
-#define WIFI_STA_CONFIG_2_RESERVED_BITMASK 0xFFFFFC00
-#else
+#if H_PRESENT_IN_ESP_IDF_5_5_0
 #define WIFI_STA_CONFIG_2_RESERVED_BITMASK 0xFFFFE000
+#else
+#define WIFI_STA_CONFIG_2_RESERVED_BITMASK 0xFFFFFC00
 #endif
 
 #define WIFI_STA_CONFIG_2_GET_RESERVED_VAL(num)                                    \

@@ -89,7 +89,7 @@ echo -e "${BOLD}-- Check 2: ESP-IDF native type usage in core (beyond check_core
 # Types that check_core_isolation.sh does NOT currently catch (commented-out or
 # only checking direct includes).  This check uses report-only by default;
 # --strict makes it a failure.
-C2_PATTERN='\besp_supp_dpp_[A-Za-z0-9_]*\b|\bwifi_event_[A-Za-z0-9_]*\b|\bWIFI_EVENT_[A-Z0-9_]*\b|\bwifi_init_config_t\b|\bwifi_config_t\b|\bwifi_ap_record_t\b|\bwifi_scan_config_t\b|\bwifi_sta_list_t\b|\bwifi_country_t\b|\bwifi_phy_mode_t\b|\bwifi_storage_t\b|\bwifi_second_chan_t\b|\bwifi_band_t\b|\bwifi_band_mode_t\b|\bwifi_protocols_t\b|\bwifi_bandwidths_t\b|\bwifi_twt_config_t\b|\bwifi_twt_setup_config_t\b|\bwifi_itwt_setup_config_t\b|\besp_hosted_event_init_t\b|\bESP_HOSTED_EVENT_[A-Za-z0-9_]*\b|\bCONFIG_ESP_HOSTED_[A-Za-z0-9_]*\b|\bCONFIG_ESP_WIFI_[A-Za-z0-9_]*\b'
+C2_PATTERN='\besp_supp_dpp_[A-Za-z0-9_]*\b|\bsupp_wifi_event_[A-Za-z0-9_]*\b|\bwifi_event_[A-Za-z0-9_]*\b|\bWIFI_EVENT_[A-Z0-9_]*\b|\bwifi_init_config_t\b|\bwifi_config_t\b|\bwifi_ap_record_t\b|\bwifi_scan_config_t\b|\bwifi_sta_list_t\b|\bwifi_country_t\b|\bwifi_phy_mode_t\b|\bwifi_storage_t\b|\bwifi_second_chan_t\b|\bwifi_band_t\b|\bwifi_band_mode_t\b|\bwifi_protocols_t\b|\bwifi_bandwidths_t\b|\bwifi_twt_config_t\b|\bwifi_twt_setup_config_t\b|\bwifi_itwt_setup_config_t\b|\besp_hosted_event_init_t\b|\bESP_HOSTED_EVENT_[A-Za-z0-9_]*\b|\bCONFIG_ESP_HOSTED_[A-Za-z0-9_]*\b|\bCONFIG_ESP_WIFI_[A-Za-z0-9_]*\b'
 
 C2_HITS=""
 for f in "${CORE_SRC_DIR}"/*.c; do
@@ -109,13 +109,46 @@ done
 if [ -z "$C2_HITS" ]; then
     echo -e "   ${GREEN}[PASS]${NC} No ESP-IDF native type usage beyond isolation scope"
 else
-    hit_count="$(echo "$C2_HITS" | wc -l)"
+    hit_count="$(printf '%s\n' "$C2_HITS" | grep -c . || true)"
     if $STRICT_MODE; then
         echo -e "   ${RED}[FAIL]${NC} ${hit_count} ESP-IDF native type usage(s) in core:"
     else
         echo -e "   ${YELLOW}[REPORT]${NC} ${hit_count} ESP-IDF native type usage(s) in core (known transition items):"
     fi
-    echo "$C2_HITS" | head -20 | while IFS= read -r hit; do
+
+    echo "   Per-file count:"
+    printf '%s\n' "$C2_HITS" \
+        | grep -v '^$' \
+        | cut -d: -f1 \
+        | sort \
+        | uniq -c \
+        | awk '{ printf "     %s %s\n", $2, $1 }'
+
+    echo "   Per-category count:"
+    wifi_event_id_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\bWIFI_EVENT_[A-Z0-9_]*\b' || true)"
+    wifi_event_payload_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\b(wifi_event_|supp_wifi_event_|esp_supp_dpp_)[A-Za-z0-9_]*\b' || true)"
+    wifi_native_struct_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\bwifi_(init_config|config|ap_record|scan_config|sta_list|country|phy_mode|storage|second_chan|band|band_mode|protocols|bandwidths|twt_config|twt_setup_config|itwt_setup_config)_t\b' || true)"
+    esp_hosted_config_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\b(ESP_HOSTED_EVENT_|CONFIG_ESP_HOSTED_|CONFIG_ESP_WIFI_)[A-Za-z0-9_]*\b' || true)"
+    printf '     WIFI_EVENT_* ids: %s\n' "$wifi_event_id_count"
+    printf '     Wi-Fi event payload types: %s\n' "$wifi_event_payload_count"
+    printf '     Wi-Fi native structs/enums: %s\n' "$wifi_native_struct_count"
+    printf '     ESP_HOSTED/CONFIG_ESP symbols: %s\n' "$esp_hosted_config_count"
+
+    echo "   Selected 4-file migration debt:"
+    selected_hits="$(printf '%s\n' "$C2_HITS" \
+        | grep -E '^host/core/src/h_rpc_(wrap|evt|req|rsp)\.c:' || true)"
+    if [ -z "$selected_hits" ]; then
+        echo "     none"
+    else
+        printf '%s\n' "$selected_hits" \
+            | cut -d: -f1 \
+            | sort \
+            | uniq -c \
+            | awk '{ printf "     %s %s\n", $2, $1 }'
+    fi
+
+    echo "   Full finding list:"
+    echo "$C2_HITS" | while IFS= read -r hit; do
         [ -z "$hit" ] && continue
         if $STRICT_MODE; then
             echo -e "   ${RED}${hit}${NC}"
@@ -123,9 +156,6 @@ else
             echo -e "   ${YELLOW}${hit}${NC}"
         fi
     done
-    if [ "$hit_count" -gt 20 ]; then
-        echo -e "   ... ($((hit_count - 20)) more, run script locally for full list)"
-    fi
     FINDINGS=$((FINDINGS + 1))
 fi
 echo ""

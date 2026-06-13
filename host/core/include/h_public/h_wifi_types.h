@@ -185,4 +185,28 @@ typedef enum {
     H_WIFI_CIPHER_TYPE_UNKNOWN,
 } h_wifi_cipher_type_t;
 
+/* ── Storage Type ──
+ * Replaces wifi_storage_t. */
+typedef enum {
+	H_WIFI_STORAGE_FLASH = 0,
+	H_WIFI_STORAGE_RAM   = 1,
+} h_wifi_storage_t;
+
+/* ── TWT Setup Config ──
+ * Replaces wifi_itwt_setup_config_t (IDF > 5.3) and
+ * wifi_twt_setup_config_t (IDF <= 5.3). Unified portable version. */
+typedef struct {
+	uint8_t  setup_cmd;
+	uint8_t  trigger;
+	uint8_t  flow_type;
+	uint8_t  flow_id;
+	uint8_t  wake_invl_expn;
+	uint8_t  wake_duration_unit;
+	uint8_t  reserved;
+	uint8_t  min_wake_dura;
+	uint16_t wake_invl_mant;
+	uint8_t  twt_id;
+	uint32_t timeout_time_ms;
+} h_wifi_twt_setup_config_t;
+
 #endif /* H_WIFI_TYPES_H */
