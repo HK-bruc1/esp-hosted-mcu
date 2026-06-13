@@ -74,6 +74,20 @@ h_err_t h_validate_contracts(void)
     }
 #endif
 
+    /* Wi-Fi conversion contract required functions */
+    if (!g_h_wifi.init_config_to_req || !g_h_wifi.config_to_req ||
+        !g_h_wifi.config_from_resp || !g_h_wifi.scan_config_to_req ||
+        !g_h_wifi.country_to_req || !g_h_wifi.ap_record_from_resp ||
+        !g_h_wifi.ap_record_from_resp_list || !g_h_wifi.country_from_resp ||
+        !g_h_wifi.sta_list_from_resp || !g_h_wifi.iface_to_native ||
+        !g_h_wifi.mode_to_native || !g_h_wifi.ps_to_native ||
+        !g_h_wifi.bw_to_native || !g_h_wifi.iface_to_host ||
+        !g_h_wifi.mode_to_host || !g_h_wifi.ps_to_host ||
+        !g_h_wifi.bw_to_host) {
+        H_LOGE("INIT", "Wi-Fi contract missing required functions");
+        return H_ERR_INVALID_ARG;
+    }
+
     H_LOGI("INIT", "All required vtable slots filled");
     return H_OK;
 }

@@ -76,7 +76,7 @@ void test_osal_init_deinit_pair(void)
 void test_vtable_null_protection(void)
 {
     /* h_validate_contracts() is defined in host/core/src/h_init.c
-     * and checks that the three g_h_* vtable instances have their
+     * and checks that the g_h_* vtable instances have their
      * required fields filled. */
     h_err_t ret = h_validate_contracts();
     TEST_ASSERT_EQUAL(H_OK, ret);

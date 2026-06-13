@@ -171,6 +171,27 @@ typedef enum {
 #define h_netif_create(t, n)             (g_h_transport.netif_create(t, n))
 #define h_netif_destroy(t, n)            (g_h_transport.netif_destroy(t, n))
 
+/* ── Wi-Fi Type Conversion ── */
+#define h_wifi_init_config_to_req(s, d)   (g_h_wifi.init_config_to_req(s, d))
+#define h_wifi_config_to_req(s, d)        (g_h_wifi.config_to_req(s, d))
+#define h_wifi_config_from_resp(s, d)     (g_h_wifi.config_from_resp(s, d))
+#define h_wifi_scan_config_to_req(s, d)   (g_h_wifi.scan_config_to_req(s, d))
+#define h_wifi_country_to_req(s, d)       (g_h_wifi.country_to_req(s, d))
+
+#define h_wifi_ap_record_from_resp(s, d)      (g_h_wifi.ap_record_from_resp(s, d))
+#define h_wifi_ap_record_from_resp_list(s, d) (g_h_wifi.ap_record_from_resp_list(s, d))
+#define h_wifi_country_from_resp(s, d)        (g_h_wifi.country_from_resp(s, d))
+#define h_wifi_sta_list_from_resp(s, d)       (g_h_wifi.sta_list_from_resp(s, d))
+
+#define h_wifi_iface_to_native(v)         (g_h_wifi.iface_to_native(v))
+#define h_wifi_mode_to_native(v)          (g_h_wifi.mode_to_native(v))
+#define h_wifi_ps_to_native(v)            (g_h_wifi.ps_to_native(v))
+#define h_wifi_bw_to_native(v)            (g_h_wifi.bw_to_native(v))
+#define h_wifi_iface_to_host(v)           (g_h_wifi.iface_to_host(v))
+#define h_wifi_mode_to_host(v)            (g_h_wifi.mode_to_host(v))
+#define h_wifi_ps_to_host(v)              (g_h_wifi.ps_to_host(v))
+#define h_wifi_bw_to_host(v)              (g_h_wifi.bw_to_host(v))
+
 /* ── Platform-specific extensions (optional in h_osal_contract_t) ── */
 #define h_restart_host() \
     H_VTABLE_CALL(&g_h_osal, restart_host)

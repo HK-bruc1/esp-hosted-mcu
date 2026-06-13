@@ -1,8 +1,8 @@
 /*
  * ESP-Hosted Host Port — Contract Definitions
  *
- * Three vtables define the complete set of platform capabilities the core
- * layer needs. A port implementation creates three const global instances
+ * Four vtables define the complete set of platform capabilities the core
+ * layer needs. A port implementation creates four const global instances
  * of these structs. The core layer accesses them exclusively through the
  * wrapper macros in h_wrapper.h.
  *
@@ -14,6 +14,7 @@
 #define H_PORT_CONTRACT_H
 
 #include "h_types.h"
+#include "h_wifi_types.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -181,9 +182,40 @@ typedef struct {
     void (*post_transport_init_hook)(void);
 } h_transport_contract_t;
 
+/* ── Wi-Fi Type Conversion Contract ──
+ * Bridges h_wifi_* portable types to/from protobuf union members
+ * that use platform-native Wi-Fi types. Core code calls these exclusively
+ * through the wrapper macros in h_wrapper.h; port implementations handle
+ * the actual field-level mapping. */
+typedef struct {
+    /* Struct: portable -> protobuf union (native-sized) */
+    void (*init_config_to_req)(const h_wifi_init_config_t *src, void *req_wifi_init_config);
+    void (*config_to_req)(const h_wifi_config_t *src, void *req_wifi_config_u);
+    void (*config_from_resp)(const void *resp_wifi_config_u, h_wifi_config_t *dst);
+    void (*scan_config_to_req)(const h_wifi_scan_config_t *src, void *req_wifi_scan_config_cfg);
+    void (*country_to_req)(const h_wifi_country_t *src, void *req_wifi_country);
+
+    /* Struct: protobuf union (native-sized) -> portable */
+    void (*ap_record_from_resp)(const void *resp_wifi_ap_record, h_wifi_ap_record_t *dst);
+    void (*ap_record_from_resp_list)(const void *resp_wifi_scan_ap_list_out_list, h_wifi_ap_record_t *dst);
+    void (*country_from_resp)(const void *resp_wifi_country, h_wifi_country_t *dst);
+    void (*sta_list_from_resp)(const void *resp_wifi_ap_sta_list, h_wifi_sta_list_t *dst);
+
+    /* Enum conversions */
+    uint8_t (*iface_to_native)(h_wifi_interface_t v);
+    uint8_t (*mode_to_native)(h_wifi_mode_t v);
+    uint8_t (*ps_to_native)(h_wifi_ps_type_t v);
+    uint8_t (*bw_to_native)(h_wifi_bandwidth_t v);
+    h_wifi_interface_t (*iface_to_host)(uint8_t v);
+    h_wifi_mode_t (*mode_to_host)(uint8_t v);
+    h_wifi_ps_type_t (*ps_to_host)(uint8_t v);
+    h_wifi_bandwidth_t (*bw_to_host)(uint8_t v);
+} h_wifi_contract_t;
+
 /* ── Global Contract Instances ──
  * Declared extern here; each port provides exactly one definition of each
  * in its own .c file. Core layer accesses via h_wrapper.h macros. */
+extern const h_wifi_contract_t    g_h_wifi;
 extern const h_osal_contract_t      g_h_osal;
 extern const h_event_contract_t     g_h_event;
 extern const h_transport_contract_t g_h_transport;

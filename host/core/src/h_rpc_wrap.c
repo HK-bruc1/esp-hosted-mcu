@@ -10,7 +10,6 @@
 #include <inttypes.h>
 #include "h_wrapper.h"
 #include "h_wifi_types.h"
-#include "h_wifi_type_adapt.h"
 #include "rpc_slave_if.h"
 #include "string.h"
 #include "rpc_wrap.h"
@@ -23,7 +22,7 @@
 #define SUCCESS H_OK
 #define FAILURE H_FAIL
 
-#include "esp_hosted_event.h"
+#include "h_event.h"
 
 #if H_DPP_SUPPORT
 // REMOVED: esp_dpp.h (Phase 2)
@@ -166,14 +165,14 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 
 		case RPC_ID__Event_ESPInit: {
 			H_LOGI(TAG, "Coprocessor Boot-up");
-			esp_hosted_event_init_t event = { 0 };
+			h_event_hosted_init_t event = { 0 };
 			event.reason = app_event->u.e_init.cp_reset_reason;
-			h_event_post(H_EVENT_HOSTED, ESP_HOSTED_EVENT_CP_INIT, &event, sizeof(event));
+			h_event_post(H_EVENT_HOSTED, H_EVENT_HOSTED_CP_INIT, &event, sizeof(event));
 			break;
 		} case RPC_ID__Event_Heartbeat: {
-			esp_hosted_event_heartbeat_t event = { 0 };
+			h_event_hosted_heartbeat_t event = { 0 };
 			event.heartbeat = app_event->u.e_heartbeat.hb_num;
-			h_event_post(H_EVENT_HOSTED, ESP_HOSTED_EVENT_CP_HEARTBEAT, &event, sizeof(event));
+			h_event_post(H_EVENT_HOSTED, H_EVENT_HOSTED_CP_HEARTBEAT, &event, sizeof(event));
 			break;
 		} case RPC_ID__Event_AP_StaConnected: {
 			wifi_event_ap_staconnected_t *p_e = &app_event->u.e_wifi_ap_staconnected;
@@ -376,8 +375,28 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 			         p_e->dhcp_ip, p_e->dhcp_gw, p_e->dns_ip);
 			break;
 		} case RPC_ID__Event_MemMonitor: {
-			esp_hosted_event_mem_info_t *p_e = &app_event->u.e_mem_info;
-			h_event_post(H_EVENT_HOSTED, ESP_HOSTED_EVENT_MEM_MONITOR, p_e, sizeof(esp_hosted_event_mem_info_t));
+			h_event_hosted_mem_info_t event = { 0 };
+
+			event.curr_total_free_heap_size = app_event->u.e_mem_info.curr_total_free_heap_size;
+			event.curr_min_free_heap_size = app_event->u.e_mem_info.curr_min_free_heap_size;
+			event.curr_internal.cap_dma.free_size =
+				app_event->u.e_mem_info.curr_internal.cap_dma.free_size;
+			event.curr_internal.cap_dma.largest_free_block =
+				app_event->u.e_mem_info.curr_internal.cap_dma.largest_free_block;
+			event.curr_internal.cap_8bit.free_size =
+				app_event->u.e_mem_info.curr_internal.cap_8bit.free_size;
+			event.curr_internal.cap_8bit.largest_free_block =
+				app_event->u.e_mem_info.curr_internal.cap_8bit.largest_free_block;
+			event.curr_external.cap_dma.free_size =
+				app_event->u.e_mem_info.curr_external.cap_dma.free_size;
+			event.curr_external.cap_dma.largest_free_block =
+				app_event->u.e_mem_info.curr_external.cap_dma.largest_free_block;
+			event.curr_external.cap_8bit.free_size =
+				app_event->u.e_mem_info.curr_external.cap_8bit.free_size;
+			event.curr_external.cap_8bit.largest_free_block =
+				app_event->u.e_mem_info.curr_external.cap_8bit.largest_free_block;
+
+			h_event_post(H_EVENT_HOSTED, H_EVENT_HOSTED_MEM_MONITOR, &event, sizeof(event));
 			break;
 #if H_PEER_DATA_TRANSFER
 		} case RPC_ID__Event_CustomRpc: {
@@ -619,7 +638,6 @@ int rpc_rsp_callback(ctrl_cmd_t * app_resp)
 		break;
 	} case RPC_ID__Resp_WifiScanGetApRecords: {
 		wifi_scan_ap_list_t * p_a = &app_resp->u.wifi_scan_ap_list;
-		wifi_ap_record_t *list = p_a->out_list;
 
 		if (!p_a->number) {
 			H_LOGV(TAG, "No AP info found");
@@ -627,7 +645,7 @@ int rpc_rsp_callback(ctrl_cmd_t * app_resp)
 		}
 		H_LOGV(TAG, "Num AP records: %u",
 				app_resp->u.wifi_scan_ap_list.number);
-		if (!list) {
+		if (!p_a->out_list) {
 			H_LOGV(TAG, "Failed to get scanned AP list");
 			goto fail_resp;
 		} else {
@@ -635,8 +653,9 @@ int rpc_rsp_callback(ctrl_cmd_t * app_resp)
 			H_LOGV(TAG, "Number of available APs is %d", p_a->number);
 			for (i=0; i<p_a->number; i++) {
 				H_LOGV(TAG, "%d) ssid \"%s\" bssid \"%s\" rssi \"%d\" channel \"%d\" auth mode \"%d\"",\
-						i, list[i].ssid, list[i].bssid, list[i].rssi,
-						list[i].primary, list[i].authmode);
+						i, p_a->out_list[i].ssid, p_a->out_list[i].bssid,
+						p_a->out_list[i].rssi, p_a->out_list[i].primary,
+						p_a->out_list[i].authmode);
 			}
 		}
 		break;
@@ -1335,12 +1354,10 @@ int rpc_wifi_init(const h_wifi_init_config_t *arg)
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
-	wifi_init_config_t native_cfg;
 
 	req->rsp_timeout_sec = WIFI_INIT_RSP_TIMEOUT_SEC;
 
-	h_wifi_adapt_init_config_to_native(arg, &native_cfg);
-	h_memcpy(&req->u.wifi_init_config, &native_cfg, sizeof(wifi_init_config_t));
+	h_wifi_init_config_to_req(arg, &req->u.wifi_init_config);
 
 #if H_WIFI_NVS_ENABLED
 	req->u.wifi_init_config.nvs_enable = YES;
@@ -1448,12 +1465,10 @@ int rpc_wifi_set_config(h_wifi_interface_t interface, h_wifi_config_t *conf)
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
-	wifi_config_t native_cfg;
 
-	h_wifi_adapt_config_to_native(conf, &native_cfg);
-	h_memcpy(&req->u.wifi_config.u, &native_cfg, sizeof(wifi_config_t));
+	h_wifi_config_to_req(conf, &req->u.wifi_config.u);
 
-	req->u.wifi_config.iface = h_wifi_adapt_iface_to_native(interface);
+	req->u.wifi_config.iface = h_wifi_iface_to_native(interface);
 	resp = rpc_slaveif_wifi_set_config(req);
 	return rpc_rsp_callback(resp);
 }
@@ -1467,14 +1482,12 @@ int rpc_wifi_get_config(h_wifi_interface_t interface, h_wifi_config_t *conf)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-	req->u.wifi_config.iface = h_wifi_adapt_iface_to_native(interface);
+	req->u.wifi_config.iface = h_wifi_iface_to_native(interface);
 
 	resp = rpc_slaveif_wifi_get_config(req);
 
 	if (resp && resp->resp_event_status == SUCCESS) {
-		wifi_config_t native_cfg;
-		h_memcpy(&native_cfg, &resp->u.wifi_config.u, sizeof(wifi_config_t));
-		h_wifi_adapt_config_to_host(&native_cfg, conf);
+		h_wifi_config_from_resp(&resp->u.wifi_config.u, conf);
 	}
 
 	return rpc_rsp_callback(resp);
@@ -1528,9 +1541,7 @@ int rpc_wifi_scan_start(const h_wifi_scan_config_t *config, bool block)
 	ctrl_cmd_t *resp = NULL;
 
 	if (config) {
-		wifi_scan_config_t native_cfg;
-		h_wifi_adapt_scan_config_to_native(config, &native_cfg);
-		h_memcpy(&req->u.wifi_scan_config.cfg, &native_cfg, sizeof(wifi_scan_config_t));
+		h_wifi_scan_config_to_req(config, &req->u.wifi_scan_config.cfg);
 		req->u.wifi_scan_config.cfg_set = 1;
 	}
 
@@ -1583,9 +1594,7 @@ int rpc_wifi_scan_get_ap_record(h_wifi_ap_record_t *ap_record)
 
 	resp = rpc_slaveif_wifi_scan_get_ap_record(req);
 	if (resp && resp->resp_event_status == SUCCESS) {
-		wifi_ap_record_t native_rec;
-		h_memcpy(&native_rec, &resp->u.wifi_ap_record, sizeof(wifi_ap_record_t));
-		h_wifi_adapt_ap_record_to_host(&native_rec, ap_record);
+		h_wifi_ap_record_from_resp(&resp->u.wifi_ap_record, ap_record);
 	}
 	return rpc_rsp_callback(resp);
 }
@@ -1607,9 +1616,7 @@ int rpc_wifi_scan_get_ap_records(uint16_t *number, h_wifi_ap_record_t *ap_record
 		H_LOGV(TAG, "num: %u",resp->u.wifi_scan_ap_list.number);
 		*number = resp->u.wifi_scan_ap_list.number;
 		for (uint16_t i = 0; i < resp->u.wifi_scan_ap_list.number; i++) {
-			wifi_ap_record_t native_rec;
-			h_memcpy(&native_rec, &resp->u.wifi_scan_ap_list.out_list[i], sizeof(wifi_ap_record_t));
-			h_wifi_adapt_ap_record_to_host(&native_rec, &ap_records[i]);
+			h_wifi_ap_record_from_resp_list(&resp->u.wifi_scan_ap_list.out_list[i], &ap_records[i]);
 		}
 	}
 	return rpc_rsp_callback(resp);
@@ -1669,10 +1676,7 @@ int rpc_wifi_sta_get_ap_info(h_wifi_ap_record_t *ap_info)
 	resp = rpc_slaveif_wifi_sta_get_ap_info(req);
 
 	if (resp && resp->resp_event_status == SUCCESS) {
-		wifi_ap_record_t native_rec;
-		h_memcpy(&native_rec, &resp->u.wifi_scan_ap_list.out_list[0],
-				sizeof(wifi_ap_record_t));
-		h_wifi_adapt_ap_record_to_host(&native_rec, ap_info);
+		h_wifi_ap_record_from_resp_list(&resp->u.wifi_scan_ap_list.out_list[0], ap_info);
 	}
 	return rpc_rsp_callback(resp);
 }
@@ -1686,7 +1690,7 @@ int rpc_wifi_set_ps(h_wifi_ps_type_t type)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-	req->u.wifi_ps.ps_mode = (wifi_ps_type_t)type;
+	req->u.wifi_ps.ps_mode = h_wifi_ps_to_native(type);
 
 	resp = rpc_slaveif_wifi_set_ps(req);
 
@@ -1704,7 +1708,7 @@ int rpc_wifi_get_ps(h_wifi_ps_type_t *type)
 
 	resp = rpc_slaveif_wifi_get_ps(req);
 
-	*type = (h_wifi_ps_type_t)resp->u.wifi_ps.ps_mode;
+	*type = h_wifi_ps_to_host((uint8_t)resp->u.wifi_ps.ps_mode);
 
 	return rpc_rsp_callback(resp);
 }
@@ -1727,7 +1731,7 @@ int rpc_wifi_set_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t bw)
 	ctrl_cmd_t *resp = NULL;
 
 	req->u.wifi_bandwidth.ifx = ifx;
-	req->u.wifi_bandwidth.bw = (wifi_bandwidth_t)bw;
+	req->u.wifi_bandwidth.bw = h_wifi_bw_to_native(bw);
 	resp = rpc_slaveif_wifi_set_bandwidth(req);
 	return rpc_rsp_callback(resp);
 }
@@ -1745,7 +1749,7 @@ int rpc_wifi_get_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t *bw)
 	resp = rpc_slaveif_wifi_get_bandwidth(req);
 
 	if (resp && resp->resp_event_status == SUCCESS) {
-		*bw = (h_wifi_bandwidth_t)resp->u.wifi_bandwidth.bw;
+		*bw = h_wifi_bw_to_host((uint8_t)resp->u.wifi_bandwidth.bw);
 	}
 	return rpc_rsp_callback(resp);
 }
@@ -1820,14 +1824,8 @@ int rpc_wifi_set_country(const h_wifi_country_t *country)
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
-	wifi_country_t native_country;
 
-	h_wifi_adapt_country_to_native(country, &native_country);
-	memcpy(&req->u.wifi_country.cc[0], &native_country.cc[0], sizeof(native_country.cc));
-	req->u.wifi_country.schan        = native_country.schan;
-	req->u.wifi_country.nchan        = native_country.nchan;
-	req->u.wifi_country.max_tx_power = native_country.max_tx_power;
-	req->u.wifi_country.policy       = native_country.policy;
+	h_wifi_country_to_req(country, &req->u.wifi_country);
 
 	resp = rpc_slaveif_wifi_set_country(req);
 	return rpc_rsp_callback(resp);
@@ -1844,13 +1842,7 @@ int rpc_wifi_get_country(h_wifi_country_t *country)
 
 	resp = rpc_slaveif_wifi_get_country(req);
 	if (resp && resp->resp_event_status == SUCCESS) {
-		wifi_country_t native_country;
-		memcpy(&native_country.cc[0], &resp->u.wifi_country.cc[0], sizeof(resp->u.wifi_country.cc));
-		native_country.schan        = resp->u.wifi_country.schan;
-		native_country.nchan        = resp->u.wifi_country.nchan;
-		native_country.max_tx_power = resp->u.wifi_country.max_tx_power;
-		native_country.policy       = resp->u.wifi_country.policy;
-		h_wifi_adapt_country_to_host(&native_country, country);
+		h_wifi_country_from_resp(&resp->u.wifi_country, country);
 	}
 	return rpc_rsp_callback(resp);
 }
@@ -1866,9 +1858,7 @@ int rpc_wifi_ap_get_sta_list(h_wifi_sta_list_t *sta)
 
 	resp = rpc_slaveif_wifi_ap_get_sta_list(req);
 	if (resp && resp->resp_event_status == SUCCESS) {
-		wifi_sta_list_t native_list;
-		h_memcpy(&native_list, &resp->u.wifi_ap_sta_list, sizeof(wifi_sta_list_t));
-		h_wifi_adapt_sta_list_to_host(&native_list, sta);
+		h_wifi_sta_list_from_resp(&resp->u.wifi_ap_sta_list, sta);
 	}
 
 	return rpc_rsp_callback(resp);

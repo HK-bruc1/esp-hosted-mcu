@@ -7,6 +7,7 @@
  */
 
 #include "h_wifi_type_adapt.h"
+#include "h_port_contract.h"
 #include <string.h>
 #include "esp_idf_version.h"
 
@@ -31,8 +32,8 @@ _Static_assert((int)H_WIFI_PS_MIN_MODEM == (int)WIFI_PS_MIN_MODEM, "ps enum drif
 
 /* Bandwidth enum names changed in ESP-IDF v6.x (WIFI_BW_HT20 -> WIFI_BW20) */
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
-_Static_assert((int)H_WIFI_BW_HT20 == 1, "bw enum drift");
-_Static_assert((int)H_WIFI_BW_HT40 == 2, "bw enum drift");
+_Static_assert((int)H_WIFI_BW_HT20 == (int)WIFI_BW20, "bw enum drift");
+_Static_assert((int)H_WIFI_BW_HT40 == (int)WIFI_BW40, "bw enum drift");
 #else
 _Static_assert((int)H_WIFI_BW_HT20 == (int)WIFI_BW_HT20, "bw enum drift");
 _Static_assert((int)H_WIFI_BW_HT40 == (int)WIFI_BW_HT40, "bw enum drift");
@@ -177,7 +178,7 @@ void h_wifi_adapt_ap_record_to_native(const h_wifi_ap_record_t *src, wifi_ap_rec
 {
     memset(dst, 0, sizeof(*dst));
     memcpy(dst->bssid, src->bssid, sizeof(dst->bssid));
-    memcpy(dst->ssid,  src->ssid,  sizeof(dst->ssid));  /* native [33] vs portable [32] */
+    memcpy(dst->ssid, src->ssid, sizeof(src->ssid));  /* native [33] vs portable [32] */
     dst->primary   = src->primary_channel;
     dst->second    = src->second_channel;
     dst->rssi      = src->rssi;
@@ -433,3 +434,149 @@ h_wifi_cipher_type_t h_wifi_adapt_cipher_to_host(wifi_cipher_type_t v)
         default:                             return H_WIFI_CIPHER_TYPE_UNKNOWN;
     }
 }
+
+/* ── Wi-Fi Conversion Contract Implementation ──
+ * Core layer calls these through g_h_wifi vtable; implementations
+ * delegate to the existing field-level adapters above. */
+
+static void contract_init_config_to_req(const h_wifi_init_config_t *src, void *req_wifi_init_config)
+{
+    wifi_init_config_t tmp;
+    h_wifi_adapt_init_config_to_native(src, &tmp);
+    memcpy(req_wifi_init_config, &tmp, sizeof(tmp));
+}
+
+static void contract_config_to_req(const h_wifi_config_t *src, void *req_wifi_config_u)
+{
+    wifi_config_t tmp;
+    h_wifi_adapt_config_to_native(src, &tmp);
+    memcpy(req_wifi_config_u, &tmp, sizeof(tmp));
+}
+
+static void contract_config_from_resp(const void *resp_wifi_config_u, h_wifi_config_t *dst)
+{
+    wifi_config_t tmp;
+    memcpy(&tmp, resp_wifi_config_u, sizeof(tmp));
+    h_wifi_adapt_config_to_host(&tmp, dst);
+}
+
+static void contract_scan_config_to_req(const h_wifi_scan_config_t *src, void *req_wifi_scan_config_cfg)
+{
+    wifi_scan_config_t tmp;
+    h_wifi_adapt_scan_config_to_native(src, &tmp);
+    memcpy(req_wifi_scan_config_cfg, &tmp, sizeof(tmp));
+}
+
+static void contract_ap_record_from_resp(const void *resp_wifi_ap_record, h_wifi_ap_record_t *dst)
+{
+    wifi_ap_record_t tmp;
+    memcpy(&tmp, resp_wifi_ap_record, sizeof(tmp));
+    h_wifi_adapt_ap_record_to_host(&tmp, dst);
+}
+
+static void contract_ap_record_from_resp_list(const void *resp_wifi_scan_ap_list_out_list, h_wifi_ap_record_t *dst)
+{
+    wifi_ap_record_t tmp;
+    memcpy(&tmp, resp_wifi_scan_ap_list_out_list, sizeof(tmp));
+    h_wifi_adapt_ap_record_to_host(&tmp, dst);
+}
+
+static void contract_country_to_req(const h_wifi_country_t *src, void *req_wifi_country)
+{
+    wifi_country_t tmp;
+    h_wifi_adapt_country_to_native(src, &tmp);
+    memcpy(req_wifi_country, &tmp, sizeof(tmp));
+}
+
+static void contract_country_from_resp(const void *resp_wifi_country, h_wifi_country_t *dst)
+{
+    wifi_country_t tmp;
+    memcpy(&tmp, resp_wifi_country, sizeof(tmp));
+    h_wifi_adapt_country_to_host(&tmp, dst);
+}
+
+static void contract_sta_list_from_resp(const void *resp_wifi_ap_sta_list, h_wifi_sta_list_t *dst)
+{
+    wifi_sta_list_t tmp;
+    memcpy(&tmp, resp_wifi_ap_sta_list, sizeof(tmp));
+    h_wifi_adapt_sta_list_to_host(&tmp, dst);
+}
+
+static uint8_t contract_iface_to_native(h_wifi_interface_t v)
+{
+    return (uint8_t)h_wifi_adapt_iface_to_native(v);
+}
+
+static uint8_t contract_mode_to_native(h_wifi_mode_t v)
+{
+    return (uint8_t)h_wifi_adapt_mode_to_native(v);
+}
+
+static uint8_t contract_ps_to_native(h_wifi_ps_type_t v)
+{
+    return (uint8_t)h_wifi_adapt_ps_to_native(v);
+}
+
+static uint8_t contract_bw_to_native(h_wifi_bandwidth_t v)
+{
+    return (uint8_t)h_wifi_adapt_bw_to_native(v);
+}
+
+static h_wifi_interface_t contract_iface_to_host(uint8_t v)
+{
+    return h_wifi_adapt_iface_to_host((wifi_interface_t)v);
+}
+
+static h_wifi_mode_t contract_mode_to_host(uint8_t v)
+{
+    return h_wifi_adapt_mode_to_host((wifi_mode_t)v);
+}
+
+static h_wifi_ps_type_t contract_ps_to_host(uint8_t v)
+{
+    return h_wifi_adapt_ps_to_host((wifi_ps_type_t)v);
+}
+
+static h_wifi_bandwidth_t contract_bw_to_host(uint8_t v)
+{
+    return h_wifi_adapt_bw_to_host((wifi_bandwidth_t)v);
+}
+
+const h_wifi_contract_t g_h_wifi = {
+    .init_config_to_req       = contract_init_config_to_req,
+    .config_to_req            = contract_config_to_req,
+    .config_from_resp         = contract_config_from_resp,
+    .scan_config_to_req       = contract_scan_config_to_req,
+    .country_to_req           = contract_country_to_req,
+    .ap_record_from_resp      = contract_ap_record_from_resp,
+    .ap_record_from_resp_list = contract_ap_record_from_resp_list,
+    .country_from_resp        = contract_country_from_resp,
+    .sta_list_from_resp       = contract_sta_list_from_resp,
+    .iface_to_native          = contract_iface_to_native,
+    .mode_to_native           = contract_mode_to_native,
+    .ps_to_native             = contract_ps_to_native,
+    .bw_to_native             = contract_bw_to_native,
+    .iface_to_host            = contract_iface_to_host,
+    .mode_to_host             = contract_mode_to_host,
+    .ps_to_host               = contract_ps_to_host,
+    .bw_to_host               = contract_bw_to_host,
+};
+
+/* ── Compile-time size guards: contract memcpy targets must match native structs ──
+ * If these fire, the protobuf union member (in rpc_slave_if.h) has diverged
+ * from the ESP-IDF native type and the memcpy in the contract functions
+ * would silently over/underflow. */
+#include "rpc_slave_if.h"
+
+_Static_assert(sizeof(wifi_init_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_init_config),
+               "wifi_init_config_t size mismatch with protobuf union");
+_Static_assert(sizeof(wifi_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_config.u),
+               "wifi_config_t size mismatch with protobuf union");
+_Static_assert(sizeof(wifi_scan_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_scan_config.cfg),
+               "wifi_scan_config_t size mismatch with protobuf union");
+_Static_assert(sizeof(wifi_ap_record_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_record),
+               "wifi_ap_record_t size mismatch with protobuf union");
+_Static_assert(sizeof(wifi_country_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_country),
+               "wifi_country_t size mismatch with protobuf union");
+_Static_assert(sizeof(wifi_sta_list_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_sta_list),
+               "wifi_sta_list_t size mismatch with protobuf union");

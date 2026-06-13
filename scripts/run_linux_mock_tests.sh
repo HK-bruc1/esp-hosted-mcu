@@ -27,7 +27,7 @@ ALL_CORE_SRCS="host/core/src/h_init.c host/core/src/h_rpc_core.c host/core/src/h
 
 # 参与链接与测试的 core 文件全集。门槛 4 完成后与 ALL_CORE_SRCS 重合。
 LINK_CORE_SRCS="host/core/src/h_init.c host/core/src/h_rpc_core.c host/core/src/h_serial_if.c host/core/src/h_event.c host/core/src/h_api.c host/core/src/h_transport_util.c host/core/src/h_rpc_utils.c host/core/src/h_rpc_rsp.c host/core/src/h_rpc_evt.c host/core/src/h_rpc_req.c host/core/src/h_transport_drv.c host/core/src/h_rpc_wrap.c"
-PORT_SRCS="host/port/linux/src/h_osal.c host/port/linux/src/h_event.c host/port/linux/src/h_transport_mock.c"
+PORT_SRCS="host/port/linux/src/h_osal.c host/port/linux/src/h_event.c host/port/linux/src/h_transport_mock.c host/port/linux/src/h_wifi.c"
 TEST_SRCS="tests/test_runner.c tests/test_osal.c tests/test_event.c tests/test_transport.c tests/test_rpc_core.c tests/test_rpc_bridge.c tests/unity/unity.c tests/stubs/rpc_wifi_stubs.c tests/stubs/protobuf_c_stubs.c tests/stubs/serial_stubs.c tests/stubs/transport_pserial_stubs.c tests/stubs/rpc_slaveif_stubs.c tests/stubs/transport_drv_stubs.c"
 PROTO_SRCS="common/proto/esp_hosted_rpc.pb-c.c"
 
