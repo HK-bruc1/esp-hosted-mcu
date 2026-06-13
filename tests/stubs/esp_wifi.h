@@ -202,8 +202,6 @@ typedef struct {
 
 #define ESP_WIFI_MAX_CONN_NUM 10
 
-#define H_MAX_CUSTOM_MSG_HANDLERS 4
-
 /* Minimal wifi_event types */
 typedef struct {
     uint8_t mac[6];
