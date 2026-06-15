@@ -110,6 +110,7 @@ static h_err_t h_rpc_wire_event_to_host(int32_t wire_id, int32_t *host_id,
 	}
 }
 
+#if H_DPP_SUPPORT
 static void rpc_copy_dpp_sta_config_to_host(h_wifi_config_t *dst, WifiStaConfig *src)
 {
 	if (!dst || !src) {
@@ -137,6 +138,7 @@ static void rpc_copy_dpp_sta_config_to_host(h_wifi_config_t *dst, WifiStaConfig 
 		dst->sta.pmf_cfg_required = src->pmf_cfg->required ? 1 : 0;
 	}
 }
+#endif
 
 #if H_PEER_DATA_TRANSFER
 #define MAX_CUSTOM_CALLBACKS H_MAX_CUSTOM_MSG_HANDLERS

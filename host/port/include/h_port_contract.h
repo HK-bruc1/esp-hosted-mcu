@@ -183,10 +183,10 @@ typedef struct {
 } h_transport_contract_t;
 
 /* ── Wi-Fi Type Conversion Contract ──
- * Bridges h_wifi_* portable types to/from protobuf union members
- * that use platform-native Wi-Fi types. Core code calls these exclusively
- * through the wrapper macros in h_wrapper.h; port implementations handle
- * the actual field-level mapping. */
+ * Bridges h_wifi_* portable types to/from ctrl_cmd_t union members. Some
+ * union members are portable h_wifi_* storage; others still use platform
+ * native Wi-Fi storage while the transition is in progress. Core code calls
+ * these exclusively through h_wrapper.h; ports own the field-level mapping. */
 typedef struct {
     /* Struct: portable -> protobuf union (native-sized) */
     void (*init_config_to_req)(const h_wifi_init_config_t *src, void *req_wifi_init_config);

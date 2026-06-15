@@ -663,7 +663,7 @@ int rpc_rsp_callback(ctrl_cmd_t * app_resp)
 			for (i=0; i<p_a->number; i++) {
 				H_LOGV(TAG, "%d) ssid \"%s\" bssid \"%s\" rssi \"%d\" channel \"%d\" auth mode \"%d\"",\
 						i, p_a->out_list[i].ssid, p_a->out_list[i].bssid,
-						p_a->out_list[i].rssi, p_a->out_list[i].primary,
+						p_a->out_list[i].rssi, p_a->out_list[i].primary_channel,
 						p_a->out_list[i].authmode);
 			}
 		}

@@ -455,9 +455,7 @@ h_wifi_cipher_type_t h_wifi_adapt_cipher_to_host(wifi_cipher_type_t v)
 
 static void contract_init_config_to_req(const h_wifi_init_config_t *src, void *req_wifi_init_config)
 {
-    wifi_init_config_t tmp;
-    h_wifi_adapt_init_config_to_native(src, &tmp);
-    memcpy(req_wifi_init_config, &tmp, sizeof(tmp));
+    memcpy(req_wifi_init_config, src, sizeof(*src));
 }
 
 static void contract_config_to_req(const h_wifi_config_t *src, void *req_wifi_config_u)
@@ -476,23 +474,17 @@ static void contract_config_from_resp(const void *resp_wifi_config_u, h_wifi_con
 
 static void contract_scan_config_to_req(const h_wifi_scan_config_t *src, void *req_wifi_scan_config_cfg)
 {
-    wifi_scan_config_t tmp;
-    h_wifi_adapt_scan_config_to_native(src, &tmp);
-    memcpy(req_wifi_scan_config_cfg, &tmp, sizeof(tmp));
+    memcpy(req_wifi_scan_config_cfg, src, sizeof(*src));
 }
 
 static void contract_ap_record_from_resp(const void *resp_wifi_ap_record, h_wifi_ap_record_t *dst)
 {
-    wifi_ap_record_t tmp;
-    memcpy(&tmp, resp_wifi_ap_record, sizeof(tmp));
-    h_wifi_adapt_ap_record_to_host(&tmp, dst);
+    memcpy(dst, resp_wifi_ap_record, sizeof(*dst));
 }
 
 static void contract_ap_record_from_resp_list(const void *resp_wifi_scan_ap_list_out_list, h_wifi_ap_record_t *dst)
 {
-    wifi_ap_record_t tmp;
-    memcpy(&tmp, resp_wifi_scan_ap_list_out_list, sizeof(tmp));
-    h_wifi_adapt_ap_record_to_host(&tmp, dst);
+    memcpy(dst, resp_wifi_scan_ap_list_out_list, sizeof(*dst));
 }
 
 static void contract_country_to_req(const h_wifi_country_t *src, void *req_wifi_country)
@@ -576,21 +568,22 @@ const h_wifi_contract_t g_h_wifi = {
     .bw_to_host               = contract_bw_to_host,
 };
 
-/* ── Compile-time size guards: contract memcpy targets must match native structs ──
- * If these fire, the protobuf union member (in rpc_slave_if.h) has diverged
- * from the ESP-IDF native type and the memcpy in the contract functions
- * would silently over/underflow. */
+/* Compile-time storage guards for ctrl_cmd_t union members.
+ * Some fields are portable h_wifi_* storage; others still use ESP-IDF
+ * native storage while the transition is in progress. Keep each guard
+ * aligned with the actual contract memcpy target type. */
 #include "rpc_slave_if.h"
 
-_Static_assert(sizeof(wifi_init_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_init_config),
-               "wifi_init_config_t size mismatch with protobuf union");
+_Static_assert(sizeof(h_wifi_init_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_init_config),
+               "h_wifi_init_config_t size mismatch with ctrl_cmd_t union");
+_Static_assert(sizeof(h_wifi_scan_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_scan_config.cfg),
+               "h_wifi_scan_config_t size mismatch with ctrl_cmd_t union");
+_Static_assert(sizeof(h_wifi_ap_record_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_record),
+               "h_wifi_ap_record_t size mismatch with ctrl_cmd_t union");
+
 _Static_assert(sizeof(wifi_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_config.u),
-               "wifi_config_t size mismatch with protobuf union");
-_Static_assert(sizeof(wifi_scan_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_scan_config.cfg),
-               "wifi_scan_config_t size mismatch with protobuf union");
-_Static_assert(sizeof(wifi_ap_record_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_record),
-               "wifi_ap_record_t size mismatch with protobuf union");
+               "wifi_config_t size mismatch with ctrl_cmd_t union");
 _Static_assert(sizeof(wifi_country_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_country),
-               "wifi_country_t size mismatch with protobuf union");
+               "wifi_country_t size mismatch with ctrl_cmd_t union");
 _Static_assert(sizeof(wifi_sta_list_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_sta_list),
-               "wifi_sta_list_t size mismatch with protobuf union");
+               "wifi_sta_list_t size mismatch with ctrl_cmd_t union");
