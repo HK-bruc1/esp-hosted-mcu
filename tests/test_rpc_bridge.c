@@ -37,6 +37,42 @@ void test_rpc_parse_rsp_base(void)
     TEST_ASSERT_EQUAL(H_ERR_NOT_SUP, app_resp.resp_event_status);
 }
 
+void test_rpc_parse_rsp_sta_list_clamps_num_to_portable_capacity(void)
+{
+    Rpc rpc_msg = {0};
+    ctrl_cmd_t app_resp = {0};
+    RpcRespWifiApGetStaList resp = RPC__RESP__WIFI_AP_GET_STA_LIST__INIT;
+    WifiStaList sta_list = WIFI_STA_LIST__INIT;
+    WifiStaInfo sta_info[12];
+    WifiStaInfo *sta_ptrs[12];
+    uint8_t macs[12][6];
+
+    rpc__init(&rpc_msg);
+    rpc_msg.msg_id = RPC_ID__Resp_WifiApGetStaList;
+    rpc_msg.resp_wifi_ap_get_sta_list = &resp;
+    resp.resp = H_OK;
+    resp.sta_list = &sta_list;
+    sta_list.num = 12;
+    sta_list.n_sta = 12;
+    sta_list.sta = sta_ptrs;
+
+    for (size_t i = 0; i < 12; i++) {
+        wifi_sta_info__init(&sta_info[i]);
+        macs[i][0] = (uint8_t)i;
+        sta_info[i].mac.data = macs[i];
+        sta_info[i].mac.len = sizeof(macs[i]);
+        sta_info[i].rssi = -30 - (int)i;
+        sta_ptrs[i] = &sta_info[i];
+    }
+
+    int ret = rpc_parse_rsp(&rpc_msg, &app_resp);
+
+    TEST_ASSERT_EQUAL(H_OK, ret);
+    TEST_ASSERT_EQUAL_UINT8(10, app_resp.u.wifi_ap_sta_list.num);
+    TEST_ASSERT_EQUAL_UINT8(0, app_resp.u.wifi_ap_sta_list.sta[0].mac[0]);
+    TEST_ASSERT_EQUAL_INT8(-39, app_resp.u.wifi_ap_sta_list.sta[9].rssi);
+}
+
 /* ── h_rpc_evt.c: rpc_parse_evt ── */
 void test_rpc_parse_evt_null(void)
 {

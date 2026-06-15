@@ -50,6 +50,9 @@ jobs:
       - name: Check Phase 1 portable boundary is ESP-IDF free
         run: bash scripts/check_core_isolation.sh
 
+      - name: Check ESP-IDF version feature guards
+        run: python scripts/check_esp_idf_feature_guards.py
+
       - name: Create required stubs for isolation check
         run: |
           mkdir -p tests/stubs/esp_event/include

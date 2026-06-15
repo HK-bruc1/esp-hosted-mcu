@@ -320,13 +320,24 @@ esp_err_t esp_wifi_remote_scan_start(const wifi_scan_config_t *config, bool bloc
 esp_err_t esp_wifi_remote_set_scan_parameters(const wifi_scan_default_params_t *config)
 {
 	check_transport_up();
-	return rpc_wifi_set_scan_parameters(config);
+	if (config) {
+		h_wifi_scan_default_params_t h_config;
+		h_wifi_adapt_scan_default_params_to_host(config, &h_config);
+		return rpc_wifi_set_scan_parameters(&h_config);
+	}
+	return rpc_wifi_set_scan_parameters(NULL);
 }
 
 esp_err_t esp_wifi_remote_get_scan_parameters(wifi_scan_default_params_t *config)
 {
 	check_transport_up();
-	return rpc_wifi_get_scan_parameters(config);
+	if (!config) return ESP_ERR_INVALID_ARG;
+	h_wifi_scan_default_params_t h_config;
+	esp_err_t ret = rpc_wifi_get_scan_parameters(&h_config);
+	if (ret == ESP_OK) {
+		h_wifi_adapt_scan_default_params_to_native(&h_config, config);
+	}
+	return ret;
 }
 
 esp_err_t esp_wifi_remote_scan_stop(void)
@@ -453,13 +464,19 @@ esp_err_t esp_wifi_remote_get_bandwidth(wifi_interface_t ifx, wifi_bandwidth_t *
 esp_err_t esp_wifi_remote_set_channel(uint8_t primary, wifi_second_chan_t second)
 {
 	check_transport_up();
-	return rpc_wifi_set_channel(primary, second);
+	return rpc_wifi_set_channel(primary, h_wifi_adapt_second_chan_to_host(second));
 }
 
 esp_err_t esp_wifi_remote_get_channel(uint8_t *primary, wifi_second_chan_t *second)
 {
 	check_transport_up();
-	return rpc_wifi_get_channel(primary, second);
+	if (!primary || !second) return ESP_ERR_INVALID_ARG;
+	h_wifi_second_chan_t h_second;
+	esp_err_t ret = rpc_wifi_get_channel(primary, &h_second);
+	if (ret == ESP_OK) {
+		*second = h_wifi_adapt_second_chan_to_native(h_second);
+	}
+	return ret;
 }
 
 esp_err_t esp_wifi_remote_set_country_code(const char *country, bool ieee80211d_enabled)
@@ -543,7 +560,13 @@ esp_err_t esp_wifi_remote_get_max_tx_power(int8_t *power)
 esp_err_t esp_wifi_remote_sta_get_negotiated_phymode(wifi_phy_mode_t *phymode)
 {
 	check_transport_up();
-	return rpc_wifi_sta_get_negotiated_phymode(phymode);
+	if (!phymode) return ESP_ERR_INVALID_ARG;
+	h_wifi_phy_mode_t h_phymode;
+	esp_err_t ret = rpc_wifi_sta_get_negotiated_phymode(&h_phymode);
+	if (ret == ESP_OK) {
+		*phymode = h_wifi_adapt_phymode_to_native(h_phymode);
+	}
+	return ret;
 }
 
 esp_err_t esp_wifi_remote_sta_get_aid(uint16_t *aid)
@@ -568,7 +591,14 @@ esp_err_t esp_wifi_remote_get_inactive_time(wifi_interface_t ifx, uint16_t *sec)
 esp_err_t esp_wifi_remote_sta_twt_config(wifi_twt_config_t *config)
 {
 	check_transport_up();
-	return rpc_wifi_sta_twt_config(config);
+	if (!config) return ESP_ERR_INVALID_ARG;
+	h_wifi_twt_config_t h_config = {
+		.post_wakeup_event = config->post_wakeup_event,
+	};
+#if H_GOT_TWT_ENABLE_KEEP_ALIVE
+	h_config.twt_enable_keep_alive = config->twt_enable_keep_alive;
+#endif
+	return rpc_wifi_sta_twt_config(&h_config);
 }
 
 #if H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3
@@ -617,49 +647,85 @@ esp_err_t esp_wifi_remote_sta_itwt_set_target_wake_time_offset(int offset_us)
 esp_err_t esp_wifi_remote_set_band(wifi_band_t band)
 {
 	check_transport_up();
-	return rpc_wifi_set_band(band);
+	return rpc_wifi_set_band((h_wifi_band_t)band);
 }
 
 esp_err_t esp_wifi_remote_get_band(wifi_band_t *band)
 {
 	check_transport_up();
-	return rpc_wifi_get_band(band);
+	if (!band) return ESP_ERR_INVALID_ARG;
+	h_wifi_band_t h_band;
+	esp_err_t ret = rpc_wifi_get_band(&h_band);
+	if (ret == ESP_OK) {
+		*band = (wifi_band_t)h_band;
+	}
+	return ret;
 }
 
 esp_err_t esp_wifi_remote_set_band_mode(wifi_band_mode_t band_mode)
 {
 	check_transport_up();
-	return rpc_wifi_set_band_mode(band_mode);
+	return rpc_wifi_set_band_mode((h_wifi_band_mode_t)band_mode);
 }
 
 esp_err_t esp_wifi_remote_get_band_mode(wifi_band_mode_t *band_mode)
 {
 	check_transport_up();
-	return rpc_wifi_get_band_mode(band_mode);
+	if (!band_mode) return ESP_ERR_INVALID_ARG;
+	h_wifi_band_mode_t h_band_mode;
+	esp_err_t ret = rpc_wifi_get_band_mode(&h_band_mode);
+	if (ret == ESP_OK) {
+		*band_mode = (wifi_band_mode_t)h_band_mode;
+	}
+	return ret;
 }
 
 esp_err_t esp_wifi_remote_set_protocols(wifi_interface_t ifx, wifi_protocols_t *protocols)
 {
 	check_transport_up();
-	return rpc_wifi_set_protocols(ifx, protocols);
+	if (!protocols) return ESP_ERR_INVALID_ARG;
+	h_wifi_protocols_t h_protocols = {
+		.ghz_2g = protocols->ghz_2g,
+		.ghz_5g = protocols->ghz_5g,
+	};
+	return rpc_wifi_set_protocols(h_wifi_adapt_iface_to_host(ifx), &h_protocols);
 }
 
 esp_err_t esp_wifi_remote_get_protocols(wifi_interface_t ifx, wifi_protocols_t *protocols)
 {
 	check_transport_up();
-	return rpc_wifi_get_protocols(ifx, protocols);
+	if (!protocols) return ESP_ERR_INVALID_ARG;
+	h_wifi_protocols_t h_protocols;
+	esp_err_t ret = rpc_wifi_get_protocols(h_wifi_adapt_iface_to_host(ifx), &h_protocols);
+	if (ret == ESP_OK) {
+		protocols->ghz_2g = h_protocols.ghz_2g;
+		protocols->ghz_5g = h_protocols.ghz_5g;
+	}
+	return ret;
 }
 
 esp_err_t esp_wifi_remote_set_bandwidths(wifi_interface_t ifx, wifi_bandwidths_t *bw)
 {
 	check_transport_up();
-	return rpc_wifi_set_bandwidths(ifx, bw);
+	if (!bw) return ESP_ERR_INVALID_ARG;
+	h_wifi_bandwidths_t h_bw = {
+		.ghz_2g = h_wifi_adapt_bw_to_host(bw->ghz_2g),
+		.ghz_5g = h_wifi_adapt_bw_to_host(bw->ghz_5g),
+	};
+	return rpc_wifi_set_bandwidths(h_wifi_adapt_iface_to_host(ifx), &h_bw);
 }
 
 esp_err_t esp_wifi_remote_get_bandwidths(wifi_interface_t ifx, wifi_bandwidths_t *bw)
 {
 	check_transport_up();
-	return rpc_wifi_get_bandwidths(ifx, bw);
+	if (!bw) return ESP_ERR_INVALID_ARG;
+	h_wifi_bandwidths_t h_bw;
+	esp_err_t ret = rpc_wifi_get_bandwidths(h_wifi_adapt_iface_to_host(ifx), &h_bw);
+	if (ret == ESP_OK) {
+		bw->ghz_2g = h_wifi_adapt_bw_to_native(h_bw.ghz_2g);
+		bw->ghz_5g = h_wifi_adapt_bw_to_native(h_bw.ghz_5g);
+	}
+	return ret;
 }
 #endif
 

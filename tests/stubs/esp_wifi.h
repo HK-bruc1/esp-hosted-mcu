@@ -323,6 +323,13 @@ typedef enum {
 
 typedef enum {
     WIFI_PHY_MODE_LR = 0,
+    WIFI_PHY_MODE_11B,
+    WIFI_PHY_MODE_11G,
+    WIFI_PHY_MODE_11A,
+    WIFI_PHY_MODE_HT20,
+    WIFI_PHY_MODE_HT40,
+    WIFI_PHY_MODE_HE20,
+    WIFI_PHY_MODE_VHT20,
 } wifi_phy_mode_t;
 
 typedef enum {
@@ -345,7 +352,8 @@ typedef struct {
 
 /* iTWT config stubs */
 typedef struct {
-    int setup;
+    bool post_wakeup_event;
+    bool twt_enable_keep_alive;
 } wifi_twt_config_t;
 
 typedef struct {
@@ -382,11 +390,14 @@ typedef struct {
 
 /* Band / protocol stubs */
 typedef enum {
-    WIFI_BAND_2G = 0,
+    WIFI_BAND_2G = 1,
+    WIFI_BAND_5G = 2,
 } wifi_band_t;
 
 typedef enum {
-    WIFI_BAND_MODE_2G_ONLY = 0,
+    WIFI_BAND_MODE_2G_ONLY = 1,
+    WIFI_BAND_MODE_5G_ONLY = 2,
+    WIFI_BAND_MODE_AUTO = 3,
 } wifi_band_mode_t;
 
 typedef struct {

@@ -215,9 +215,9 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 		RPC_ERR_IN_RESP(resp_wifi_scan_params);
 
 		if (p_c) {
-			p_a->config.scan_time.passive = p_c->scan_time->passive;
-			p_a->config.scan_time.active.min = p_c->scan_time->active->min;
-			p_a->config.scan_time.active.max = p_c->scan_time->active->max;
+			p_a->config.passive_scan_time = p_c->scan_time->passive;
+			p_a->config.active_scan_min_time = p_c->scan_time->active->min;
+			p_a->config.active_scan_max_time = p_c->scan_time->active->max;
 			p_a->config.home_chan_dwell_time = p_c->home_chan_dwell_time;
 		}
 		break;
@@ -427,31 +427,25 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 		RPC_FAIL_ON_NULL(resp_wifi_ap_get_sta_list);
 		RPC_ERR_IN_RESP(resp_wifi_ap_get_sta_list);
 
-		// handle case where slave's num is bigger than our ESP_WIFI_MAX_CONN_NUM
+		/* Portable h_wifi_sta_list_t has fixed 10-slot array */
 		uint32_t num_stations = rpc_msg->resp_wifi_ap_get_sta_list->sta_list->num;
-		if (num_stations > ESP_WIFI_MAX_CONN_NUM) {
-			H_LOGW(TAG, "Slave returned %ld connected stations, but we can only accept %d items", num_stations, ESP_WIFI_MAX_CONN_NUM);
-			num_stations = ESP_WIFI_MAX_CONN_NUM;
+		uint32_t max_stations = sizeof(app_resp->u.wifi_ap_sta_list.sta) /
+		                        sizeof(app_resp->u.wifi_ap_sta_list.sta[0]);
+		if (num_stations > max_stations) {
+			H_LOGW(TAG, "Slave returned %ld connected stations, but we can only accept %ld items",
+					num_stations, max_stations);
+			num_stations = max_stations;
 		}
 
 		WifiStaInfo ** p_c_sta_list = rpc_msg->resp_wifi_ap_get_sta_list->sta_list->sta;
 
 		for (uint32_t i = 0; i < num_stations; i++) {
-			wifi_sta_info_t * p_a_sta = &app_resp->u.wifi_ap_sta_list.sta[i];
-
-			RPC_RSP_COPY_BYTES(p_a_sta->mac, p_c_sta_list[i]->mac);
-			p_a_sta->rssi = p_c_sta_list[i]->rssi;
-
-			p_a_sta->phy_11b = H_GET_BIT(WIFI_STA_INFO_phy_11b_BIT, p_c_sta_list[i]->bitmask);
-			p_a_sta->phy_11g = H_GET_BIT(WIFI_STA_INFO_phy_11g_BIT, p_c_sta_list[i]->bitmask);
-			p_a_sta->phy_11n = H_GET_BIT(WIFI_STA_INFO_phy_11n_BIT, p_c_sta_list[i]->bitmask);
-			p_a_sta->phy_lr = H_GET_BIT(WIFI_STA_INFO_phy_lr_BIT, p_c_sta_list[i]->bitmask);
-			p_a_sta->phy_11ax = H_GET_BIT(WIFI_STA_INFO_phy_11ax_BIT, p_c_sta_list[i]->bitmask);
-			p_a_sta->is_mesh_child = H_GET_BIT(WIFI_STA_INFO_is_mesh_child_BIT, p_c_sta_list[i]->bitmask);
-			p_a_sta->reserved = WIFI_STA_INFO_GET_RESERVED_VAL(p_c_sta_list[i]->bitmask);
+			RPC_RSP_COPY_BYTES(app_resp->u.wifi_ap_sta_list.sta[i].mac,
+					p_c_sta_list[i]->mac);
+			app_resp->u.wifi_ap_sta_list.sta[i].rssi = p_c_sta_list[i]->rssi;
 		}
 
-		app_resp->u.wifi_ap_sta_list.num = rpc_msg->resp_wifi_ap_get_sta_list->sta_list->num;
+		app_resp->u.wifi_ap_sta_list.num = num_stations;
 		break;
 	} case RPC_ID__Resp_WifiApGetStaAid: {
 		RPC_FAIL_ON_NULL(resp_wifi_ap_get_sta_aid);

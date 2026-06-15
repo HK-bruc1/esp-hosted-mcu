@@ -10,13 +10,12 @@
 
 #include <stdbool.h>
 #include "esp_hosted_rpc.pb-c.h"
-#include "esp_wifi.h"
-#include "esp_mac.h"
 #include "esp_wifi_types.h"
 #include "esp_hosted_misc.h"
 #include "esp_hosted_misc_types.h"
 #include "h_port_config.h"
 #include "h_event.h"
+#include "h_wifi_types.h"
 #include "h_dpp_types.h"
 #if H_WIFI_ENTERPRISE_SUPPORT
 #include "esp_eap_client.h"
@@ -124,7 +123,9 @@ typedef struct {
 
 
 typedef struct {
-	wifi_scan_time_t scan_time;
+	uint16_t active_scan_min_time;
+	uint16_t active_scan_max_time;
+	uint16_t passive_scan_time;
 	uint8_t home_chan_dwell_time;
 } rpc_wifi_scan_default_params_t;
 
@@ -159,8 +160,8 @@ typedef struct {
 
 typedef struct {
 	bool enable;
-	wifi_vendor_ie_type_t type;
-	wifi_vendor_ie_id_t idx;
+	h_wifi_vendor_ie_type_t type;
+	h_wifi_vendor_ie_id_t idx;
 	vendor_ie_data_t vnd_ie;
 } wifi_softap_vendor_ie_t;
 
@@ -174,13 +175,13 @@ typedef struct {
 } wifi_tx_power_t;
 
 typedef struct {
-	wifi_interface_t ifx;
-	wifi_bandwidth_t bw;
+	h_wifi_interface_t ifx;
+	h_wifi_bandwidth_t bw;
 } rpc_wifi_bandwidth_t;
 
 typedef struct {
 	uint8_t primary;
-	wifi_second_chan_t second;
+	h_wifi_second_chan_t second;
 } rpc_wifi_channel_t;
 
 typedef struct {
@@ -189,7 +190,7 @@ typedef struct {
 } rpc_wifi_country_code;
 
 typedef struct {
-	wifi_interface_t ifx;
+	h_wifi_interface_t ifx;
 	uint8_t protocol_bitmap;
 } rpc_wifi_protocol;
 
@@ -203,7 +204,7 @@ typedef struct {
 } rpc_wifi_sta_get_rssi_t;
 
 typedef struct {
-	wifi_phy_mode_t phymode;
+	h_wifi_phy_mode_t phymode;
 } rpc_wifi_sta_get_negotiated_phymode_t;
 
 typedef struct {
@@ -211,7 +212,7 @@ typedef struct {
 } rpc_wifi_sta_get_aid_t;
 
 typedef struct {
-	wifi_interface_t ifx;
+	h_wifi_interface_t ifx;
 	uint16_t ghz_2g;
 	uint16_t ghz_5g;
 } rpc_wifi_protocols_t;
@@ -228,9 +229,9 @@ typedef struct {
 } rpc_coprocessor_fwversion_t;
 
 typedef struct {
-	wifi_interface_t ifx;
-	wifi_bandwidth_t ghz_2g;
-	wifi_bandwidth_t ghz_5g;
+	h_wifi_interface_t ifx;
+	h_wifi_bandwidth_t ghz_2g;
+	h_wifi_bandwidth_t ghz_5g;
 } rpc_wifi_bandwidths_t;
 
 typedef struct {
@@ -247,18 +248,18 @@ typedef struct {
 
 typedef struct {
 	bool set;
-	esp_mac_type_t type;
+	uint32_t type;
 	size_t mac_len;
 	uint8_t mac[IFACE_MAC_SIZE];
 } rpc_iface_mac_t;
 
 typedef struct {
 	size_t len;
-	esp_mac_type_t type;
+	uint32_t type;
 } rpc_iface_mac_len_t;
 
 typedef struct {
-	wifi_interface_t ifx;
+	h_wifi_interface_t ifx;
 	uint16_t sec;
 } rpc_wifi_inactive_time_t;
 
@@ -470,9 +471,9 @@ typedef struct Ctrl_cmd_t {
 
 		rpc_wifi_country_code       wifi_country_code;
 
-		wifi_country_t              wifi_country;
+		h_wifi_country_t            wifi_country;
 
-		wifi_sta_list_t             wifi_ap_sta_list;
+		h_wifi_sta_list_t           wifi_ap_sta_list;
 
 		rpc_wifi_ap_get_sta_aid_t   wifi_ap_get_sta_aid;
 
@@ -507,7 +508,7 @@ typedef struct Ctrl_cmd_t {
 
 		esp_hosted_app_desc_t       app_desc;
 #if H_WIFI_HE_SUPPORT
-		wifi_twt_config_t           wifi_twt_config;
+		h_wifi_twt_config_t         wifi_twt_config;
 
 		h_wifi_twt_setup_config_t   wifi_itwt_setup_config;
 
@@ -527,9 +528,9 @@ typedef struct Ctrl_cmd_t {
 
 		rpc_wifi_bandwidths_t       wifi_bandwidths;
 
-		wifi_band_t                 wifi_band;
+		h_wifi_band_t               wifi_band;
 
-		wifi_band_mode_t            wifi_band_mode;
+		h_wifi_band_mode_t          wifi_band_mode;
 #endif
 
 		rpc_set_dhcp_dns_status_t   slave_dhcp_dns_status;

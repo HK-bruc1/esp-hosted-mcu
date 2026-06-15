@@ -8,7 +8,13 @@
 #define H_WIFI_TYPE_ADAPT_H
 
 #include "esp_wifi.h"
+#include "esp_mac.h"
+#include "h_types.h"
 #include "h_wifi_types.h"
+
+#ifndef H_WIFI_DUALBAND_SUPPORT
+#define H_WIFI_DUALBAND_SUPPORT 0
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,6 +54,40 @@ h_wifi_auth_mode_t h_wifi_adapt_auth_to_host(wifi_auth_mode_t v);
 
 wifi_cipher_type_t h_wifi_adapt_cipher_to_native(h_wifi_cipher_type_t v);
 h_wifi_cipher_type_t h_wifi_adapt_cipher_to_host(wifi_cipher_type_t v);
+
+wifi_second_chan_t h_wifi_adapt_second_chan_to_native(h_wifi_second_chan_t v);
+h_wifi_second_chan_t h_wifi_adapt_second_chan_to_host(wifi_second_chan_t v);
+
+wifi_phy_mode_t h_wifi_adapt_phymode_to_native(h_wifi_phy_mode_t v);
+h_wifi_phy_mode_t h_wifi_adapt_phymode_to_host(wifi_phy_mode_t v);
+
+wifi_band_t h_wifi_adapt_band_to_native(h_wifi_band_t v);
+h_wifi_band_t h_wifi_adapt_band_to_host(wifi_band_t v);
+
+#if H_WIFI_DUALBAND_SUPPORT
+wifi_band_mode_t h_wifi_adapt_band_mode_to_native(h_wifi_band_mode_t v);
+h_wifi_band_mode_t h_wifi_adapt_band_mode_to_host(wifi_band_mode_t v);
+#endif
+
+void h_wifi_adapt_scan_default_params_to_native(const h_wifi_scan_default_params_t *src, wifi_scan_default_params_t *dst);
+void h_wifi_adapt_scan_default_params_to_host(const wifi_scan_default_params_t *src, h_wifi_scan_default_params_t *dst);
+
+#if H_WIFI_DUALBAND_SUPPORT
+void h_wifi_adapt_protocols_to_native(const h_wifi_protocols_t *src, wifi_protocols_t *dst);
+void h_wifi_adapt_protocols_to_host(const wifi_protocols_t *src, h_wifi_protocols_t *dst);
+
+void h_wifi_adapt_bandwidths_to_native(const h_wifi_bandwidths_t *src, wifi_bandwidths_t *dst);
+void h_wifi_adapt_bandwidths_to_host(const wifi_bandwidths_t *src, h_wifi_bandwidths_t *dst);
+#endif
+
+esp_mac_type_t h_wifi_adapt_mac_type_to_native(h_mac_type_t v);
+h_mac_type_t h_wifi_adapt_mac_type_to_host(esp_mac_type_t v);
+
+wifi_vendor_ie_type_t h_wifi_adapt_vendor_ie_type_to_native(h_wifi_vendor_ie_type_t v);
+h_wifi_vendor_ie_type_t h_wifi_adapt_vendor_ie_type_to_host(wifi_vendor_ie_type_t v);
+
+wifi_vendor_ie_id_t h_wifi_adapt_vendor_ie_id_to_native(h_wifi_vendor_ie_id_t v);
+h_wifi_vendor_ie_id_t h_wifi_adapt_vendor_ie_id_to_host(wifi_vendor_ie_id_t v);
 
 #ifdef __cplusplus
 }

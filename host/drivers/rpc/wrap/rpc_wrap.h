@@ -67,8 +67,8 @@ esp_err_t rpc_wifi_set_config(h_wifi_interface_t interface, h_wifi_config_t *con
 esp_err_t rpc_wifi_get_config(h_wifi_interface_t interface, h_wifi_config_t *conf);
 esp_err_t rpc_wifi_get_mac(h_wifi_interface_t mode, uint8_t mac[6]);
 esp_err_t rpc_wifi_set_mac(h_wifi_interface_t mode, const uint8_t mac[6]);
-esp_err_t rpc_wifi_set_scan_parameters(const wifi_scan_default_params_t *config);
-esp_err_t rpc_wifi_get_scan_parameters(wifi_scan_default_params_t *config);
+esp_err_t rpc_wifi_set_scan_parameters(const h_wifi_scan_default_params_t *config);
+esp_err_t rpc_wifi_get_scan_parameters(h_wifi_scan_default_params_t *config);
 
 esp_err_t rpc_wifi_scan_start(const h_wifi_scan_config_t *config, bool block);
 esp_err_t rpc_wifi_scan_stop(void);
@@ -85,8 +85,8 @@ esp_err_t rpc_wifi_get_ps(h_wifi_ps_type_t *type);
 esp_err_t rpc_wifi_set_storage(h_wifi_storage_t storage);
 esp_err_t rpc_wifi_set_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t bw);
 esp_err_t rpc_wifi_get_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t *bw);
-esp_err_t rpc_wifi_set_channel(uint8_t primary, wifi_second_chan_t second);
-esp_err_t rpc_wifi_get_channel(uint8_t *primary, wifi_second_chan_t *second);
+esp_err_t rpc_wifi_set_channel(uint8_t primary, h_wifi_second_chan_t second);
+esp_err_t rpc_wifi_get_channel(uint8_t *primary, h_wifi_second_chan_t *second);
 esp_err_t rpc_wifi_set_country_code(const char *country, bool ieee80211d_enabled);
 esp_err_t rpc_wifi_get_country_code(char *country);
 esp_err_t rpc_wifi_set_country(const h_wifi_country_t *country);
@@ -98,7 +98,7 @@ esp_err_t rpc_wifi_set_protocol(h_wifi_interface_t ifx, uint8_t protocol_bitmap)
 esp_err_t rpc_wifi_get_protocol(h_wifi_interface_t ifx, uint8_t *protocol_bitmap);
 esp_err_t rpc_wifi_set_max_tx_power(int8_t power);
 esp_err_t rpc_wifi_get_max_tx_power(int8_t *power);
-esp_err_t rpc_wifi_sta_get_negotiated_phymode(wifi_phy_mode_t *phymode);
+esp_err_t rpc_wifi_sta_get_negotiated_phymode(h_wifi_phy_mode_t *phymode);
 esp_err_t rpc_wifi_sta_get_aid(uint16_t *aid);
 esp_err_t rpc_wifi_set_inactive_time(h_wifi_interface_t ifx, uint16_t sec);
 esp_err_t rpc_wifi_get_inactive_time(h_wifi_interface_t ifx, uint16_t *sec);
@@ -134,7 +134,7 @@ esp_err_t rpc_ota_end(void);
 esp_err_t rpc_ota_activate(void);
 
 #if H_WIFI_HE_SUPPORT
-esp_err_t rpc_wifi_sta_twt_config(wifi_twt_config_t *config);
+esp_err_t rpc_wifi_sta_twt_config(h_wifi_twt_config_t *config);
 esp_err_t rpc_wifi_sta_itwt_setup(h_wifi_twt_setup_config_t *setup_config);
 esp_err_t rpc_wifi_sta_itwt_teardown(int flow_id);
 esp_err_t rpc_wifi_sta_itwt_suspend(int flow_id, int suspend_time_ms);
@@ -144,14 +144,14 @@ esp_err_t rpc_wifi_sta_itwt_set_target_wake_time_offset(int offset_us);
 #endif
 
 #if H_WIFI_DUALBAND_SUPPORT
-esp_err_t rpc_wifi_set_band(wifi_band_t band);
-esp_err_t rpc_wifi_get_band(wifi_band_t *band);
-esp_err_t rpc_wifi_set_band_mode(wifi_band_mode_t band_mode);
-esp_err_t rpc_wifi_get_band_mode(wifi_band_mode_t *band_mode);
-esp_err_t rpc_wifi_set_protocols(h_wifi_interface_t ifx, wifi_protocols_t *protocols);
-esp_err_t rpc_wifi_get_protocols(h_wifi_interface_t ifx, wifi_protocols_t *protocols);
-esp_err_t rpc_wifi_set_bandwidths(h_wifi_interface_t ifx, wifi_bandwidths_t *bw);
-esp_err_t rpc_wifi_get_bandwidths(h_wifi_interface_t ifx, wifi_bandwidths_t *bw);
+esp_err_t rpc_wifi_set_band(h_wifi_band_t band);
+esp_err_t rpc_wifi_get_band(h_wifi_band_t *band);
+esp_err_t rpc_wifi_set_band_mode(h_wifi_band_mode_t band_mode);
+esp_err_t rpc_wifi_get_band_mode(h_wifi_band_mode_t *band_mode);
+esp_err_t rpc_wifi_set_protocols(h_wifi_interface_t ifx, h_wifi_protocols_t *protocols);
+esp_err_t rpc_wifi_get_protocols(h_wifi_interface_t ifx, h_wifi_protocols_t *protocols);
+esp_err_t rpc_wifi_set_bandwidths(h_wifi_interface_t ifx, h_wifi_bandwidths_t *bw);
+esp_err_t rpc_wifi_get_bandwidths(h_wifi_interface_t ifx, h_wifi_bandwidths_t *bw);
 #endif
 
 esp_err_t rpc_set_dhcp_dns_status(h_wifi_interface_t interface, uint8_t link_up,

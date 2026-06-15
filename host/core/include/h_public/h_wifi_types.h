@@ -16,8 +16,6 @@
 
 /* ── Wi-Fi Initialization Config ── */
 typedef struct {
-    void     *rx_ba_win;       /* STATIC_RX_BUFFER_NUM */
-    void     *tx_ba_win;       /* STATIC_TX_BUFFER_NUM */
     uint32_t  feature_caps;    /* Feature capability flags */
     uint32_t  sta_mgmt_buf;    /* mgmt buf for STA */
     uint16_t  tx_buf_num;      /* dynamic TX buffer number */
@@ -150,6 +148,46 @@ typedef enum {
     H_WIFI_BW_HT40 = 2,
 } h_wifi_bandwidth_t;
 
+/* ── Second Channel ──
+ * Replaces wifi_second_chan_t. */
+typedef enum {
+    H_WIFI_SECOND_CHAN_NONE = 0,
+    H_WIFI_SECOND_CHAN_ABOVE = 1,
+    H_WIFI_SECOND_CHAN_BELOW = 2,
+} h_wifi_second_chan_t;
+
+/* ── PHY Mode ──
+ * Replaces the co-processor platform's PHY mode enum.
+ * Values are chosen for direct cast compatibility; the port adapter
+ * uses _Static_assert to catch enum drift at compile time. */
+typedef enum {
+    H_WIFI_PHY_MODE_LR   = 0,
+    H_WIFI_PHY_MODE_11B  = 1,
+    H_WIFI_PHY_MODE_11G  = 2,
+    H_WIFI_PHY_MODE_11A  = 3,
+    H_WIFI_PHY_MODE_HT20 = 4,
+    H_WIFI_PHY_MODE_HT40 = 5,
+    H_WIFI_PHY_MODE_HE20 = 6,
+    H_WIFI_PHY_MODE_VHT20 = 7,
+} h_wifi_phy_mode_t;
+
+/* ── Band ──
+ * Replaces wifi_band_t. */
+typedef enum {
+    H_WIFI_BAND_2G   = 1,
+    H_WIFI_BAND_5G   = 2,
+    H_WIFI_BAND_MAX  = 3, /* Host-local sentinel; no ESP-IDF native equivalent. */
+} h_wifi_band_t;
+
+/* ── Band Mode ──
+ * Replaces wifi_band_mode_t. */
+typedef enum {
+    H_WIFI_BAND_MODE_2G_ONLY = 1,
+    H_WIFI_BAND_MODE_5G_ONLY = 2,
+    H_WIFI_BAND_MODE_AUTO = 3,
+    H_WIFI_BAND_MODE_MAX = 4, /* Host-local sentinel; no ESP-IDF native equivalent. */
+} h_wifi_band_mode_t;
+
 /* ── Auth Mode ──
  * Replaces wifi_auth_mode_t. */
 typedef enum {
@@ -192,6 +230,23 @@ typedef enum {
 	H_WIFI_STORAGE_RAM   = 1,
 } h_wifi_storage_t;
 
+/* ── Vendor IE Type ──
+ * Replaces wifi_vendor_ie_type_t (esp_wifi_types.h). */
+typedef enum {
+    H_WIFI_VND_IE_TYPE_BEACON = 0,
+    H_WIFI_VND_IE_TYPE_PROBE_REQ,
+    H_WIFI_VND_IE_TYPE_PROBE_RESP,
+    H_WIFI_VND_IE_TYPE_ASSOC_REQ,
+    H_WIFI_VND_IE_TYPE_ASSOC_RESP,
+} h_wifi_vendor_ie_type_t;
+
+/* ── Vendor IE ID ──
+ * Replaces wifi_vendor_ie_id_t (esp_wifi_types.h). */
+typedef enum {
+    H_WIFI_VND_IE_ID_0 = 0,
+    H_WIFI_VND_IE_ID_1,
+} h_wifi_vendor_ie_id_t;
+
 /* ── TWT Setup Config ──
  * Replaces wifi_itwt_setup_config_t (IDF > 5.3) and
  * wifi_twt_setup_config_t (IDF <= 5.3). Unified portable version. */
@@ -208,5 +263,36 @@ typedef struct {
 	uint8_t  twt_id;
 	uint32_t timeout_time_ms;
 } h_wifi_twt_setup_config_t;
+
+/* ── TWT Config ──
+ * Replaces wifi_twt_config_t (esp_wifi_types.h).
+ * Only the fields used by RPC serialization are included. */
+typedef struct {
+    bool post_wakeup_event;
+    bool twt_enable_keep_alive;
+} h_wifi_twt_config_t;
+
+/* ── Scan Default Params ──
+ * Replaces wifi_scan_default_params_t. */
+typedef struct {
+    uint16_t active_scan_min_time;   /* minimum active scan time per channel (ms) */
+    uint16_t active_scan_max_time;   /* maximum active scan time per channel (ms) */
+    uint16_t passive_scan_time;      /* passive scan time per channel (ms) */
+    uint8_t  home_chan_dwell_time;   /* dwell time on home channel (ms) */
+} h_wifi_scan_default_params_t;
+
+/* ── Protocols Config ──
+ * Replaces wifi_protocols_t. Protocol bitmaps per band. */
+typedef struct {
+    uint16_t ghz_2g;             /* 2.4 GHz protocol bitmap */
+    uint16_t ghz_5g;             /* 5 GHz protocol bitmap */
+} h_wifi_protocols_t;
+
+/* ── Bandwidths Config ──
+ * Replaces wifi_bandwidths_t. Bandwidth setting per band. */
+typedef struct {
+    h_wifi_bandwidth_t ghz_2g;   /* 2.4 GHz bandwidth */
+    h_wifi_bandwidth_t ghz_5g;   /* 5 GHz bandwidth */
+} h_wifi_bandwidths_t;
 
 #endif /* H_WIFI_TYPES_H */

@@ -6,10 +6,12 @@
  * 若发现矩阵与代码不一致,以矩阵为准更新代码。
  */
 
+#include "h_port_config.h"
 #include "h_wifi_type_adapt.h"
 #include "h_port_contract.h"
 #include <string.h>
 #include "esp_idf_version.h"
+#include "esp_mac.h"
 #include "h_dpp_types.h"
 
 /* ── Compile-time coarse consistency checks ──
@@ -234,8 +236,12 @@ void h_wifi_adapt_ap_record_to_host(const wifi_ap_record_t *src, h_wifi_ap_recor
 void h_wifi_adapt_sta_list_to_native(const h_wifi_sta_list_t *src, wifi_sta_list_t *dst)
 {
     memset(dst, 0, sizeof(*dst));
-    int n = (src->num < sizeof(dst->sta)/sizeof(dst->sta[0])) ? src->num : sizeof(dst->sta)/sizeof(dst->sta[0]);
-    for (int i = 0; i < n; i++) {
+    size_t src_cap = sizeof(src->sta) / sizeof(src->sta[0]);
+    size_t dst_cap = sizeof(dst->sta) / sizeof(dst->sta[0]);
+    size_t n = src->num;
+    if (n > src_cap) n = src_cap;
+    if (n > dst_cap) n = dst_cap;
+    for (size_t i = 0; i < n; i++) {
         memcpy(dst->sta[i].mac, src->sta[i].mac, sizeof(dst->sta[i].mac));
         dst->sta[i].rssi = src->sta[i].rssi;
     }
@@ -245,8 +251,12 @@ void h_wifi_adapt_sta_list_to_native(const h_wifi_sta_list_t *src, wifi_sta_list
 void h_wifi_adapt_sta_list_to_host(const wifi_sta_list_t *src, h_wifi_sta_list_t *dst)
 {
     memset(dst, 0, sizeof(*dst));
-    int n = (src->num < sizeof(dst->sta)/sizeof(dst->sta[0])) ? src->num : sizeof(dst->sta)/sizeof(dst->sta[0]);
-    for (int i = 0; i < n; i++) {
+    size_t src_cap = sizeof(src->sta) / sizeof(src->sta[0]);
+    size_t dst_cap = sizeof(dst->sta) / sizeof(dst->sta[0]);
+    size_t n = src->num;
+    if (n > src_cap) n = src_cap;
+    if (n > dst_cap) n = dst_cap;
+    for (size_t i = 0; i < n; i++) {
         memcpy(dst->sta[i].mac, src->sta[i].mac, sizeof(dst->sta[i].mac));
         dst->sta[i].rssi = src->sta[i].rssi;
     }
@@ -449,6 +459,148 @@ h_wifi_cipher_type_t h_wifi_adapt_cipher_to_host(wifi_cipher_type_t v)
     }
 }
 
+/* ── h_wifi_second_chan_t <-> wifi_second_chan_t ── */
+_Static_assert((int)H_WIFI_SECOND_CHAN_NONE   == (int)WIFI_SECOND_CHAN_NONE,   "second_chan enum drift");
+_Static_assert((int)H_WIFI_SECOND_CHAN_ABOVE  == (int)WIFI_SECOND_CHAN_ABOVE,  "second_chan enum drift");
+_Static_assert((int)H_WIFI_SECOND_CHAN_BELOW  == (int)WIFI_SECOND_CHAN_BELOW,  "second_chan enum drift");
+
+wifi_second_chan_t h_wifi_adapt_second_chan_to_native(h_wifi_second_chan_t v)
+{ return (wifi_second_chan_t)v; }
+
+h_wifi_second_chan_t h_wifi_adapt_second_chan_to_host(wifi_second_chan_t v)
+{ return (h_wifi_second_chan_t)v; }
+
+/* ── h_wifi_phy_mode_t <-> wifi_phy_mode_t ──
+ * Values mirror ESP-IDF v5.3 wifi_phy_mode_t exactly — direct cast. */
+_Static_assert((int)H_WIFI_PHY_MODE_LR   == (int)WIFI_PHY_MODE_LR,   "phy_mode enum drift");
+_Static_assert((int)H_WIFI_PHY_MODE_11B  == (int)WIFI_PHY_MODE_11B,  "phy_mode enum drift");
+_Static_assert((int)H_WIFI_PHY_MODE_11G  == (int)WIFI_PHY_MODE_11G,  "phy_mode enum drift");
+_Static_assert((int)H_WIFI_PHY_MODE_11A  == (int)WIFI_PHY_MODE_11A,  "phy_mode enum drift");
+_Static_assert((int)H_WIFI_PHY_MODE_HT20 == (int)WIFI_PHY_MODE_HT20, "phy_mode enum drift");
+_Static_assert((int)H_WIFI_PHY_MODE_HT40 == (int)WIFI_PHY_MODE_HT40, "phy_mode enum drift");
+_Static_assert((int)H_WIFI_PHY_MODE_HE20 == (int)WIFI_PHY_MODE_HE20, "phy_mode enum drift");
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+_Static_assert((int)H_WIFI_PHY_MODE_VHT20 == (int)WIFI_PHY_MODE_VHT20, "phy_mode enum drift");
+#endif
+
+wifi_phy_mode_t h_wifi_adapt_phymode_to_native(h_wifi_phy_mode_t v)
+{ return (wifi_phy_mode_t)v; }
+
+h_wifi_phy_mode_t h_wifi_adapt_phymode_to_host(wifi_phy_mode_t v)
+{ return (h_wifi_phy_mode_t)v; }
+
+/* ── h_wifi_band_t <-> wifi_band_t ──
+ * Values mirror ESP-IDF wifi_band_t exactly — direct cast. */
+_Static_assert((int)H_WIFI_BAND_2G   == (int)WIFI_BAND_2G,   "band enum drift");
+_Static_assert((int)H_WIFI_BAND_5G   == (int)WIFI_BAND_5G,   "band enum drift");
+
+wifi_band_t h_wifi_adapt_band_to_native(h_wifi_band_t v)
+{ return (wifi_band_t)v; }
+
+h_wifi_band_t h_wifi_adapt_band_to_host(wifi_band_t v)
+{ return (h_wifi_band_t)v; }
+
+#if H_WIFI_DUALBAND_SUPPORT
+/* ── h_wifi_band_mode_t <-> wifi_band_mode_t ──
+ * Values mirror ESP-IDF wifi_band_mode_t exactly — direct cast. */
+_Static_assert((int)H_WIFI_BAND_MODE_2G_ONLY == (int)WIFI_BAND_MODE_2G_ONLY, "band_mode enum drift");
+_Static_assert((int)H_WIFI_BAND_MODE_5G_ONLY == (int)WIFI_BAND_MODE_5G_ONLY, "band_mode enum drift");
+_Static_assert((int)H_WIFI_BAND_MODE_AUTO    == (int)WIFI_BAND_MODE_AUTO,    "band_mode enum drift");
+
+wifi_band_mode_t h_wifi_adapt_band_mode_to_native(h_wifi_band_mode_t v)
+{ return (wifi_band_mode_t)v; }
+
+h_wifi_band_mode_t h_wifi_adapt_band_mode_to_host(wifi_band_mode_t v)
+{ return (h_wifi_band_mode_t)v; }
+
+/* ── h_wifi_scan_default_params_t <-> wifi_scan_default_params_t ── */
+void h_wifi_adapt_scan_default_params_to_native(const h_wifi_scan_default_params_t *src, wifi_scan_default_params_t *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->scan_time.active.min = src->active_scan_min_time;
+    dst->scan_time.active.max = src->active_scan_max_time;
+    dst->scan_time.passive    = src->passive_scan_time;
+    dst->home_chan_dwell_time  = src->home_chan_dwell_time;
+}
+
+void h_wifi_adapt_scan_default_params_to_host(const wifi_scan_default_params_t *src, h_wifi_scan_default_params_t *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->active_scan_min_time = src->scan_time.active.min;
+    dst->active_scan_max_time = src->scan_time.active.max;
+    dst->passive_scan_time    = src->scan_time.passive;
+    dst->home_chan_dwell_time  = src->home_chan_dwell_time;
+}
+
+/* ── h_wifi_protocols_t <-> wifi_protocols_t ── */
+void h_wifi_adapt_protocols_to_native(const h_wifi_protocols_t *src, wifi_protocols_t *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->ghz_2g = (uint8_t)src->ghz_2g;
+    dst->ghz_5g = (uint8_t)src->ghz_5g;
+}
+
+void h_wifi_adapt_protocols_to_host(const wifi_protocols_t *src, h_wifi_protocols_t *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->ghz_2g = src->ghz_2g;
+    dst->ghz_5g = src->ghz_5g;
+}
+
+/* ── h_wifi_bandwidths_t <-> wifi_bandwidths_t ── */
+void h_wifi_adapt_bandwidths_to_native(const h_wifi_bandwidths_t *src, wifi_bandwidths_t *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->ghz_2g = h_wifi_adapt_bw_to_native(src->ghz_2g);
+    dst->ghz_5g = h_wifi_adapt_bw_to_native(src->ghz_5g);
+}
+
+void h_wifi_adapt_bandwidths_to_host(const wifi_bandwidths_t *src, h_wifi_bandwidths_t *dst)
+{
+    memset(dst, 0, sizeof(*dst));
+    dst->ghz_2g = h_wifi_adapt_bw_to_host(src->ghz_2g);
+    dst->ghz_5g = h_wifi_adapt_bw_to_host(src->ghz_5g);
+}
+#endif
+
+/* ── h_mac_type_t <-> esp_mac_type_t ──
+ * Values mirror esp_mac_type_t — direct cast. */
+_Static_assert((int)H_MAC_WIFI_STA   == (int)ESP_MAC_WIFI_STA,   "mac_type enum drift");
+_Static_assert((int)H_MAC_WIFI_SOFTAP == (int)ESP_MAC_WIFI_SOFTAP, "mac_type enum drift");
+_Static_assert((int)H_MAC_BT         == (int)ESP_MAC_BT,         "mac_type enum drift");
+_Static_assert((int)H_MAC_ETH        == (int)ESP_MAC_ETH,        "mac_type enum drift");
+
+esp_mac_type_t h_wifi_adapt_mac_type_to_native(h_mac_type_t v)
+{ return (esp_mac_type_t)v; }
+
+h_mac_type_t h_wifi_adapt_mac_type_to_host(esp_mac_type_t v)
+{ return (h_mac_type_t)v; }
+
+/* ── h_wifi_vendor_ie_type_t <-> wifi_vendor_ie_type_t ──
+ * Values mirror wifi_vendor_ie_type_t — direct cast. */
+_Static_assert((int)H_WIFI_VND_IE_TYPE_BEACON     == (int)WIFI_VND_IE_TYPE_BEACON,     "vendor_ie_type enum drift");
+_Static_assert((int)H_WIFI_VND_IE_TYPE_PROBE_REQ  == (int)WIFI_VND_IE_TYPE_PROBE_REQ,  "vendor_ie_type enum drift");
+_Static_assert((int)H_WIFI_VND_IE_TYPE_PROBE_RESP == (int)WIFI_VND_IE_TYPE_PROBE_RESP, "vendor_ie_type enum drift");
+_Static_assert((int)H_WIFI_VND_IE_TYPE_ASSOC_REQ  == (int)WIFI_VND_IE_TYPE_ASSOC_REQ,  "vendor_ie_type enum drift");
+_Static_assert((int)H_WIFI_VND_IE_TYPE_ASSOC_RESP == (int)WIFI_VND_IE_TYPE_ASSOC_RESP, "vendor_ie_type enum drift");
+
+wifi_vendor_ie_type_t h_wifi_adapt_vendor_ie_type_to_native(h_wifi_vendor_ie_type_t v)
+{ return (wifi_vendor_ie_type_t)v; }
+
+h_wifi_vendor_ie_type_t h_wifi_adapt_vendor_ie_type_to_host(wifi_vendor_ie_type_t v)
+{ return (h_wifi_vendor_ie_type_t)v; }
+
+/* ── h_wifi_vendor_ie_id_t <-> wifi_vendor_ie_id_t ──
+ * Values mirror wifi_vendor_ie_id_t — direct cast. */
+_Static_assert((int)H_WIFI_VND_IE_ID_0 == (int)WIFI_VND_IE_ID_0, "vendor_ie_id enum drift");
+_Static_assert((int)H_WIFI_VND_IE_ID_1 == (int)WIFI_VND_IE_ID_1, "vendor_ie_id enum drift");
+
+wifi_vendor_ie_id_t h_wifi_adapt_vendor_ie_id_to_native(h_wifi_vendor_ie_id_t v)
+{ return (wifi_vendor_ie_id_t)v; }
+
+h_wifi_vendor_ie_id_t h_wifi_adapt_vendor_ie_id_to_host(wifi_vendor_ie_id_t v)
+{ return (h_wifi_vendor_ie_id_t)v; }
+
 /* ── Wi-Fi Conversion Contract Implementation ──
  * Core layer calls these through g_h_wifi vtable; implementations
  * delegate to the existing field-level adapters above. */
@@ -489,23 +641,20 @@ static void contract_ap_record_from_resp_list(const void *resp_wifi_scan_ap_list
 
 static void contract_country_to_req(const h_wifi_country_t *src, void *req_wifi_country)
 {
-    wifi_country_t tmp;
-    h_wifi_adapt_country_to_native(src, &tmp);
-    memcpy(req_wifi_country, &tmp, sizeof(tmp));
+    /* ctrl_cmd_t union stores h_wifi_country_t directly */
+    memcpy(req_wifi_country, src, sizeof(h_wifi_country_t));
 }
 
 static void contract_country_from_resp(const void *resp_wifi_country, h_wifi_country_t *dst)
 {
-    wifi_country_t tmp;
-    memcpy(&tmp, resp_wifi_country, sizeof(tmp));
-    h_wifi_adapt_country_to_host(&tmp, dst);
+    /* ctrl_cmd_t union stores h_wifi_country_t directly */
+    memcpy(dst, resp_wifi_country, sizeof(h_wifi_country_t));
 }
 
 static void contract_sta_list_from_resp(const void *resp_wifi_ap_sta_list, h_wifi_sta_list_t *dst)
 {
-    wifi_sta_list_t tmp;
-    memcpy(&tmp, resp_wifi_ap_sta_list, sizeof(tmp));
-    h_wifi_adapt_sta_list_to_host(&tmp, dst);
+    /* ctrl_cmd_t union stores h_wifi_sta_list_t directly */
+    memcpy(dst, resp_wifi_ap_sta_list, sizeof(h_wifi_sta_list_t));
 }
 
 static uint8_t contract_iface_to_native(h_wifi_interface_t v)
@@ -583,7 +732,7 @@ _Static_assert(sizeof(h_wifi_ap_record_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap
 
 _Static_assert(sizeof(wifi_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_config.u),
                "wifi_config_t size mismatch with ctrl_cmd_t union");
-_Static_assert(sizeof(wifi_country_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_country),
-               "wifi_country_t size mismatch with ctrl_cmd_t union");
-_Static_assert(sizeof(wifi_sta_list_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_sta_list),
-               "wifi_sta_list_t size mismatch with ctrl_cmd_t union");
+_Static_assert(sizeof(h_wifi_country_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_country),
+               "h_wifi_country_t size mismatch with ctrl_cmd_t union");
+_Static_assert(sizeof(h_wifi_sta_list_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_sta_list),
+               "h_wifi_sta_list_t size mismatch with ctrl_cmd_t union");

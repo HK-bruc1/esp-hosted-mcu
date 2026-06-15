@@ -57,4 +57,13 @@ typedef enum {
 typedef void (*h_event_handler_t)(void *event_data, size_t event_data_size,
                                   void *user_ctx);
 
+/* ── MAC Address Type ──
+ * Replaces esp_mac_type_t (esp_mac.h). */
+typedef enum {
+    H_MAC_WIFI_STA = 0,
+    H_MAC_WIFI_SOFTAP,
+    H_MAC_BT,
+    H_MAC_ETH,
+} h_mac_type_t;
+
 #endif /* H_TYPES_H */

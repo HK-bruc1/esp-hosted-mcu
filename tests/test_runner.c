@@ -23,6 +23,7 @@ extern void test_process_priv_communication_null(void);
 /* RPC bridge tests */
 extern void test_rpc_parse_rsp_null(void);
 extern void test_rpc_parse_rsp_base(void);
+extern void test_rpc_parse_rsp_sta_list_clamps_num_to_portable_capacity(void);
 extern void test_rpc_parse_evt_null(void);
 extern void test_rpc_parse_evt_unknown(void);
 extern void test_compose_rpc_req_simple(void);
@@ -31,6 +32,34 @@ extern void test_serial_drv_null_args(void);
 extern void test_rpc_platform_deinit_safe(void);
 extern void test_rpc_init_start_stop_deinit(void);
 extern void test_rpc_copy_wifi_sta_config_basic(void);
+/* Wi-Fi type conversion tests */
+extern void test_wifi_second_chan_enum_values(void);
+extern void test_wifi_phy_mode_enum_values(void);
+extern void test_wifi_phy_mode_enum_distinct(void);
+extern void test_wifi_second_chan_enum_distinct(void);
+extern void test_wifi_band_enum_values(void);
+extern void test_wifi_band_mode_enum_values(void);
+extern void test_wifi_scan_default_params_sizeof(void);
+extern void test_wifi_scan_default_params_field_access(void);
+extern void test_wifi_scan_default_params_boundary(void);
+extern void test_wifi_scan_default_params_zero_init(void);
+extern void test_wifi_second_chan_round_trip(void);
+extern void test_wifi_phy_mode_round_trip(void);
+extern void test_wifi_config_t_sta_fields(void);
+extern void test_wifi_config_t_ap_fields(void);
+extern void test_wifi_config_t_sta_ap_isolation(void);
+extern void test_wifi_protocols_t_field_access(void);
+extern void test_wifi_protocols_t_boundary(void);
+extern void test_wifi_protocols_t_zero_init(void);
+extern void test_wifi_bandwidths_t_field_access(void);
+extern void test_wifi_bandwidths_t_zero_init(void);
+extern void test_wifi_sta_list_capacity_is_ten(void);
+extern void test_wifi_twt_config_t_field_access(void);
+extern void test_wifi_twt_config_t_zero_init(void);
+extern void test_mac_type_enum_values(void);
+extern void test_mac_type_enum_distinct(void);
+extern void test_wifi_vendor_ie_type_enum_values(void);
+extern void test_wifi_vendor_ie_id_enum_values(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -63,6 +92,7 @@ int main(void)
     /* RPC bridge contract tests */
     RUN_TEST(test_rpc_parse_rsp_null);
     RUN_TEST(test_rpc_parse_rsp_base);
+    RUN_TEST(test_rpc_parse_rsp_sta_list_clamps_num_to_portable_capacity);
     RUN_TEST(test_rpc_parse_evt_null);
     RUN_TEST(test_rpc_parse_evt_unknown);
     RUN_TEST(test_compose_rpc_req_simple);
@@ -71,5 +101,33 @@ int main(void)
     RUN_TEST(test_rpc_platform_deinit_safe);
     RUN_TEST(test_rpc_init_start_stop_deinit);
     RUN_TEST(test_rpc_copy_wifi_sta_config_basic);
+    /* Wi-Fi type conversion tests */
+    RUN_TEST(test_wifi_second_chan_enum_values);
+    RUN_TEST(test_wifi_phy_mode_enum_values);
+    RUN_TEST(test_wifi_phy_mode_enum_distinct);
+    RUN_TEST(test_wifi_second_chan_enum_distinct);
+    RUN_TEST(test_wifi_band_enum_values);
+    RUN_TEST(test_wifi_band_mode_enum_values);
+    RUN_TEST(test_wifi_scan_default_params_sizeof);
+    RUN_TEST(test_wifi_scan_default_params_field_access);
+    RUN_TEST(test_wifi_scan_default_params_boundary);
+    RUN_TEST(test_wifi_scan_default_params_zero_init);
+    RUN_TEST(test_wifi_second_chan_round_trip);
+    RUN_TEST(test_wifi_phy_mode_round_trip);
+    RUN_TEST(test_wifi_config_t_sta_fields);
+    RUN_TEST(test_wifi_config_t_ap_fields);
+    RUN_TEST(test_wifi_config_t_sta_ap_isolation);
+    RUN_TEST(test_wifi_protocols_t_field_access);
+    RUN_TEST(test_wifi_protocols_t_boundary);
+    RUN_TEST(test_wifi_protocols_t_zero_init);
+    RUN_TEST(test_wifi_bandwidths_t_field_access);
+    RUN_TEST(test_wifi_bandwidths_t_zero_init);
+    RUN_TEST(test_wifi_sta_list_capacity_is_ten);
+    RUN_TEST(test_wifi_twt_config_t_field_access);
+    RUN_TEST(test_wifi_twt_config_t_zero_init);
+    RUN_TEST(test_mac_type_enum_values);
+    RUN_TEST(test_mac_type_enum_distinct);
+    RUN_TEST(test_wifi_vendor_ie_type_enum_values);
+    RUN_TEST(test_wifi_vendor_ie_id_enum_values);
     return UNITY_END();
 }

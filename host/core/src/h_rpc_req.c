@@ -223,9 +223,9 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 			RPC_ALLOC_ELEMENT(WifiScanTime, req_payload->config->scan_time, wifi_scan_time__init);
 			RPC_ALLOC_ELEMENT(WifiActiveScanTime, req_payload->config->scan_time->active, wifi_active_scan_time__init);
 
-			req_payload->config->scan_time->passive = p_a->config.scan_time.passive;
-			req_payload->config->scan_time->active->min = p_a->config.scan_time.active.min;
-			req_payload->config->scan_time->active->max = p_a->config.scan_time.active.max;
+			req_payload->config->scan_time->passive = p_a->config.passive_scan_time;
+			req_payload->config->scan_time->active->min = p_a->config.active_scan_min_time;
+			req_payload->config->scan_time->active->max = p_a->config.active_scan_max_time;
 			req_payload->config->home_chan_dwell_time = p_a->config.home_chan_dwell_time;
 			req_payload->is_config_null = false;
 		} else {

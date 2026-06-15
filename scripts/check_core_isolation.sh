@@ -59,17 +59,15 @@ grepx() {
 FORBIDDEN+=$(grepx '#include "esp_err\.h"\|#include "esp_wifi\.h"\|#include "esp_log\.h"\|#include "esp_timer\.h"\|#include "esp_heap_caps\.h"')
 FORBIDDEN+=$(grepx '#include "esp_private/')
 # ESP-IDF types
-FORBIDDEN+=$(grepx '\besp_err_t\b\|\besp_event_base_t\b\|\besp_mac_type_t\b\|\bwifi_interface_t\b')
+FORBIDDEN+=$(grepx '\besp_err_t\b\|\besp_event_base_t\b\|\besp_mac_type_t\b\|\bwifi_interface_t\b\|\bwifi_vendor_ie_type_t\b\|\bwifi_vendor_ie_id_t\b')
 # struct esp_priv_event — 定义在 common/transport/esp_hosted_transport.h，是项目公共协议类型，
 # 非 ESP-IDF 专属；已从禁用项中移除，避免 WP 3.2 纳入 h_transport_drv.c 后产生假阳性。
 # ESP-IDF log macros
 FORBIDDEN+=$(grepx 'ESP_LOG[IEWDV]\|ESP_EARLY_LOG')
-# ESP-IDF struct types (C type usage, not field accessor names)
-# NOTE: These types are temporarily allowed in bridge-layer files
-# (h_rpc_wrap.c, h_rpc_req.c, h_rpc_rsp.c) because they perform
-# protobuf <-> ESP-IDF Wi-Fi struct serialization. Full abstraction
-# via h_wifi_types.h is a Gate 4 / Phase 2 task.
-# FORBIDDEN+=$(grepx '\bwifi_init_config_t\b\|\bwifi_config_t\b\|\bwifi_ap_record_t\b\|\bwifi_scan_config_t\b\|\bwifi_sta_list_t\b\|\bwifi_country_t\b')
+# ESP-IDF Wi-Fi struct types — fully portable-ized, native types must not appear in core
+FORBIDDEN+=$(grepx '\bwifi_init_config_t\b\|\bwifi_config_t\b\|\bwifi_ap_record_t\b\|\bwifi_scan_config_t\b\|\bwifi_sta_list_t\b\|\bwifi_country_t\b')
+# ESP-IDF Wi-Fi enum/scalar types — portable-ized in this round
+FORBIDDEN+=$(grepx '\bwifi_second_chan_t\b\|\bwifi_phy_mode_t\b\|\bwifi_scan_default_params_t\b\|\bwifi_band_t\b\|\bwifi_band_mode_t\b\|\bwifi_protocols_t\b\|\bwifi_bandwidths_t\b\|\bwifi_twt_config_t\b')
 
 # ESP_PRIV_* constants — defined in common/transport/esp_hosted_transport.h,
 # these are project public wire-format protocol symbols, not ESP-IDF-specific.

@@ -1039,7 +1039,7 @@ int rpc_wifi_get_max_tx_power(int8_t *power)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_sta_get_negotiated_phymode(wifi_phy_mode_t *phymode)
+h_err_t rpc_wifi_sta_get_negotiated_phymode(h_wifi_phy_mode_t *phymode)
 {
 	if (!phymode)
 		return H_ERR_INVALID_ARG;
@@ -1102,7 +1102,7 @@ h_err_t rpc_wifi_get_inactive_time(h_wifi_interface_t ifx, uint16_t *sec)
 }
 
 #if H_WIFI_HE_SUPPORT
-h_err_t rpc_wifi_sta_twt_config(wifi_twt_config_t *config)
+h_err_t rpc_wifi_sta_twt_config(h_wifi_twt_config_t *config)
 {
 	if (!config)
 		return H_ERR_INVALID_ARG;
@@ -1111,7 +1111,7 @@ h_err_t rpc_wifi_sta_twt_config(wifi_twt_config_t *config)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-	h_memcpy(&req->u.wifi_twt_config, config, sizeof(wifi_twt_config_t));
+	h_memcpy(&req->u.wifi_twt_config, config, sizeof(h_wifi_twt_config_t));
 	resp = rpc_slaveif_wifi_sta_twt_config(req);
 	return rpc_rsp_callback(resp);
 }
@@ -1193,7 +1193,7 @@ h_err_t rpc_wifi_sta_itwt_set_target_wake_time_offset(int offset_us)
 #endif // H_WIFI_HE_SUPPORT
 
 #if H_WIFI_DUALBAND_SUPPORT
-h_err_t rpc_wifi_set_band(wifi_band_t band)
+h_err_t rpc_wifi_set_band(h_wifi_band_t band)
 {
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
@@ -1205,7 +1205,7 @@ h_err_t rpc_wifi_set_band(wifi_band_t band)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_get_band(wifi_band_t *band)
+h_err_t rpc_wifi_get_band(h_wifi_band_t *band)
 {
 	if (!band)
 		return H_ERR_INVALID_ARG;
@@ -1221,7 +1221,7 @@ h_err_t rpc_wifi_get_band(wifi_band_t *band)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_set_band_mode(wifi_band_mode_t band_mode)
+h_err_t rpc_wifi_set_band_mode(h_wifi_band_mode_t band_mode)
 {
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
@@ -1233,7 +1233,7 @@ h_err_t rpc_wifi_set_band_mode(wifi_band_mode_t band_mode)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_get_band_mode(wifi_band_mode_t *band_mode)
+h_err_t rpc_wifi_get_band_mode(h_wifi_band_mode_t *band_mode)
 {
 	if (!band_mode)
 		return H_ERR_INVALID_ARG;
@@ -1249,7 +1249,7 @@ h_err_t rpc_wifi_get_band_mode(wifi_band_mode_t *band_mode)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_set_protocols(h_wifi_interface_t ifx, wifi_protocols_t *protocols)
+h_err_t rpc_wifi_set_protocols(h_wifi_interface_t ifx, h_wifi_protocols_t *protocols)
 {
 	if (!protocols)
 		return H_ERR_INVALID_ARG;
@@ -1266,7 +1266,7 @@ h_err_t rpc_wifi_set_protocols(h_wifi_interface_t ifx, wifi_protocols_t *protoco
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_get_protocols(h_wifi_interface_t ifx, wifi_protocols_t *protocols)
+h_err_t rpc_wifi_get_protocols(h_wifi_interface_t ifx, h_wifi_protocols_t *protocols)
 {
 	if (!protocols)
 		return H_ERR_INVALID_ARG;
@@ -1285,7 +1285,7 @@ h_err_t rpc_wifi_get_protocols(h_wifi_interface_t ifx, wifi_protocols_t *protoco
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_set_bandwidths(h_wifi_interface_t ifx, wifi_bandwidths_t *bw)
+h_err_t rpc_wifi_set_bandwidths(h_wifi_interface_t ifx, h_wifi_bandwidths_t *bw)
 {
 	if (!bw)
 		return H_ERR_INVALID_ARG;
@@ -1302,7 +1302,7 @@ h_err_t rpc_wifi_set_bandwidths(h_wifi_interface_t ifx, wifi_bandwidths_t *bw)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_wifi_get_bandwidths(h_wifi_interface_t ifx, wifi_bandwidths_t *bw)
+h_err_t rpc_wifi_get_bandwidths(h_wifi_interface_t ifx, h_wifi_bandwidths_t *bw)
 {
 	if (!bw)
 		return H_ERR_INVALID_ARG;
@@ -1494,7 +1494,7 @@ int rpc_wifi_get_config(h_wifi_interface_t interface, h_wifi_config_t *conf)
 	return rpc_rsp_callback(resp);
 }
 
-int rpc_wifi_set_scan_parameters(const wifi_scan_default_params_t *config)
+int rpc_wifi_set_scan_parameters(const h_wifi_scan_default_params_t *config)
 {
 	// don't check: config can be NULL
 
@@ -1514,7 +1514,7 @@ int rpc_wifi_set_scan_parameters(const wifi_scan_default_params_t *config)
 	return rpc_rsp_callback(resp);
 }
 
-int rpc_wifi_get_scan_parameters(wifi_scan_default_params_t *config)
+int rpc_wifi_get_scan_parameters(h_wifi_scan_default_params_t *config)
 {
 	if (!config)
 		return H_ERR_INVALID_ARG;
@@ -1755,7 +1755,7 @@ int rpc_wifi_get_bandwidth(h_wifi_interface_t ifx, h_wifi_bandwidth_t *bw)
 	return rpc_rsp_callback(resp);
 }
 
-int rpc_wifi_set_channel(uint8_t primary, wifi_second_chan_t second)
+int rpc_wifi_set_channel(uint8_t primary, h_wifi_second_chan_t second)
 {
 	/* implemented synchronous */
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
@@ -1767,7 +1767,7 @@ int rpc_wifi_set_channel(uint8_t primary, wifi_second_chan_t second)
 	return rpc_rsp_callback(resp);
 }
 
-int rpc_wifi_get_channel(uint8_t *primary, wifi_second_chan_t *second)
+int rpc_wifi_get_channel(uint8_t *primary, h_wifi_second_chan_t *second)
 {
 	if ((!primary) || (!second))
 		return H_ERR_INVALID_ARG;
