@@ -1,9 +1,9 @@
 # .github/workflows/host-core-test.yml
 #
 # Three-tier CI for host core layer:
-#   Tier 1: Phase 1 portable-boundary isolation check (30s)
-#   Tier 2: Linux mock tests — 13/13 core files compile, 13/13 linked,
-#            13/13 with production-path test coverage (3min)
+#   Tier 1: portable-boundary and current-platform active-path isolation checks (30s)
+#   Tier 2: Linux mock tests - 12/12 core files compile, 12/12 linked,
+#            12/12 with production-path test coverage (3min)
 #   Tier 3: ESP-IDF slave build matrix (30min)
 #
 # All jobs run on ubuntu-latest with zero hardware dependencies.
@@ -38,7 +38,7 @@ permissions:
 
 jobs:
 
-  # ── Tier 1: Compile Isolation Check (30s) ──
+  # Tier 1: Compile and isolation checks (30s)
   isolation-check:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -47,8 +47,17 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Check Phase 1 portable boundary is ESP-IDF free
+      - name: Check core portable boundary is ESP-IDF free
         run: bash scripts/check_core_isolation.sh
+
+      - name: Check core include closure is ESP-IDF free
+        run: bash scripts/check_core_include_closure.sh --strict
+
+      - name: Check current-platform active path isolation
+        run: |
+          for transport in spi spi_hd sdio uart; do
+            bash scripts/check_current_platform_isolation.sh "$transport" --strict
+          done
 
       - name: Check ESP-IDF version feature guards
         run: python scripts/check_esp_idf_feature_guards.py

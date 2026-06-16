@@ -11,7 +11,7 @@
 #
 # Current core portable scope covers the declared host/core portable boundary:
 #   - public/internal portable headers
-#   - all 13 source files under host/core/src/
+#   - all 12 source files under host/core/src/
 #
 # Known discrepancy with run_linux_mock_tests.sh testable set:
 #   - h_rpc_core.c  — in mock build, but mock exercises H_BUILD_TESTS test-only
