@@ -13,6 +13,7 @@
 #include "esp_idf_version.h"
 #include "esp_mac.h"
 #include "h_dpp_types.h"
+#include <stddef.h>
 
 /* ── Compile-time coarse consistency checks ──
  * These do NOT assert field-level offsetof equality because portable
@@ -595,6 +596,18 @@ h_wifi_vendor_ie_type_t h_wifi_adapt_vendor_ie_type_to_host(wifi_vendor_ie_type_
 _Static_assert((int)H_WIFI_VND_IE_ID_0 == (int)WIFI_VND_IE_ID_0, "vendor_ie_id enum drift");
 _Static_assert((int)H_WIFI_VND_IE_ID_1 == (int)WIFI_VND_IE_ID_1, "vendor_ie_id enum drift");
 
+_Static_assert(sizeof(h_wifi_vendor_ie_data_t) == sizeof(vendor_ie_data_t), "vendor_ie_data size drift");
+_Static_assert(offsetof(h_wifi_vendor_ie_data_t, element_id) == offsetof(vendor_ie_data_t, element_id),
+        "vendor_ie_data element_id offset drift");
+_Static_assert(offsetof(h_wifi_vendor_ie_data_t, length) == offsetof(vendor_ie_data_t, length),
+        "vendor_ie_data length offset drift");
+_Static_assert(offsetof(h_wifi_vendor_ie_data_t, vendor_oui) == offsetof(vendor_ie_data_t, vendor_oui),
+        "vendor_ie_data vendor_oui offset drift");
+_Static_assert(offsetof(h_wifi_vendor_ie_data_t, vendor_oui_type) == offsetof(vendor_ie_data_t, vendor_oui_type),
+        "vendor_ie_data vendor_oui_type offset drift");
+_Static_assert(offsetof(h_wifi_vendor_ie_data_t, payload) == offsetof(vendor_ie_data_t, payload),
+        "vendor_ie_data payload offset drift");
+
 wifi_vendor_ie_id_t h_wifi_adapt_vendor_ie_id_to_native(h_wifi_vendor_ie_id_t v)
 { return (wifi_vendor_ie_id_t)v; }
 
@@ -608,20 +621,6 @@ h_wifi_vendor_ie_id_t h_wifi_adapt_vendor_ie_id_to_host(wifi_vendor_ie_id_t v)
 static void contract_init_config_to_req(const h_wifi_init_config_t *src, void *req_wifi_init_config)
 {
     memcpy(req_wifi_init_config, src, sizeof(*src));
-}
-
-static void contract_config_to_req(const h_wifi_config_t *src, void *req_wifi_config_u)
-{
-    wifi_config_t tmp;
-    h_wifi_adapt_config_to_native(src, &tmp);
-    memcpy(req_wifi_config_u, &tmp, sizeof(tmp));
-}
-
-static void contract_config_from_resp(const void *resp_wifi_config_u, h_wifi_config_t *dst)
-{
-    wifi_config_t tmp;
-    memcpy(&tmp, resp_wifi_config_u, sizeof(tmp));
-    h_wifi_adapt_config_to_host(&tmp, dst);
 }
 
 static void contract_scan_config_to_req(const h_wifi_scan_config_t *src, void *req_wifi_scan_config_cfg)
@@ -699,8 +698,6 @@ static h_wifi_bandwidth_t contract_bw_to_host(uint8_t v)
 
 const h_wifi_contract_t g_h_wifi = {
     .init_config_to_req       = contract_init_config_to_req,
-    .config_to_req            = contract_config_to_req,
-    .config_from_resp         = contract_config_from_resp,
     .scan_config_to_req       = contract_scan_config_to_req,
     .country_to_req           = contract_country_to_req,
     .ap_record_from_resp      = contract_ap_record_from_resp,
@@ -718,9 +715,7 @@ const h_wifi_contract_t g_h_wifi = {
 };
 
 /* Compile-time storage guards for ctrl_cmd_t union members.
- * Some fields are portable h_wifi_* storage; others still use ESP-IDF
- * native storage while the transition is in progress. Keep each guard
- * aligned with the actual contract memcpy target type. */
+ * Keep each guard aligned with the actual contract memcpy target type. */
 #include "rpc_slave_if.h"
 
 _Static_assert(sizeof(h_wifi_init_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_init_config),
@@ -730,8 +725,8 @@ _Static_assert(sizeof(h_wifi_scan_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_
 _Static_assert(sizeof(h_wifi_ap_record_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_record),
                "h_wifi_ap_record_t size mismatch with ctrl_cmd_t union");
 
-_Static_assert(sizeof(wifi_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_config.u),
-               "wifi_config_t size mismatch with ctrl_cmd_t union");
+_Static_assert(sizeof(h_wifi_config_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_config.u),
+               "h_wifi_config_t size mismatch with ctrl_cmd_t union");
 _Static_assert(sizeof(h_wifi_country_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_country),
                "h_wifi_country_t size mismatch with ctrl_cmd_t union");
 _Static_assert(sizeof(h_wifi_sta_list_t) == sizeof(((ctrl_cmd_t *)0)->u.wifi_ap_sta_list),

@@ -19,6 +19,7 @@
 #include "port_esp_hosted_host_log.h"
 #include "transport_drv.h"
 #include "esp_hosted_event.h"
+#include "h_wifi_type_adapt.h"
 
 #if H_DPP_SUPPORT
 #include "esp_dpp.h"
@@ -281,8 +282,8 @@ static int rpc_event_callback(ctrl_cmd_t * app_event)
 				item.dpp_event = ESP_SUPP_DPP_CFG_RECVD;
 				item.dpp_data = g_h.funcs->_h_malloc(sizeof(wifi_config_t));
 				if (item.dpp_data) {
-					g_h.funcs->_h_memcpy(item.dpp_data, &app_event->u.e_dpp_config_received.wifi_cfg,
-							sizeof(wifi_config_t));
+					h_wifi_adapt_config_to_native(&app_event->u.e_dpp_config_received.wifi_cfg,
+							(wifi_config_t *)item.dpp_data);
 					g_h.funcs->_h_queue_item(rpc_supp_cb_thread_q, &item, HOSTED_BLOCK_MAX);
 				} else {
 					ESP_LOGE(TAG, "malloc failed for dpp wifi config");
@@ -1450,7 +1451,7 @@ int rpc_wifi_set_config(wifi_interface_t interface, wifi_config_t *conf)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-	g_h.funcs->_h_memcpy(&req->u.wifi_config.u, conf, sizeof(wifi_config_t));
+	h_wifi_adapt_config_to_host(conf, &req->u.wifi_config.u);
 
 	req->u.wifi_config.iface = interface;
 	resp = rpc_slaveif_wifi_set_config(req);
@@ -1471,7 +1472,7 @@ int rpc_wifi_get_config(wifi_interface_t interface, wifi_config_t *conf)
 	resp = rpc_slaveif_wifi_get_config(req);
 
 	if (resp && resp->resp_event_status == SUCCESS) {
-		g_h.funcs->_h_memcpy(conf, &resp->u.wifi_config.u, sizeof(wifi_config_t));
+		h_wifi_adapt_config_to_native(&resp->u.wifi_config.u, conf);
 	}
 
 	return rpc_rsp_callback(resp);
@@ -2174,7 +2175,7 @@ esp_err_t rpc_eap_client_get_disable_time_check(bool *disable)
 	return rpc_rsp_callback(resp);
 }
 
-esp_err_t rpc_eap_client_set_ttls_phase2_method(esp_eap_ttls_phase2_types type)
+esp_err_t rpc_eap_client_set_ttls_phase2_method(h_eap_ttls_phase2_types_t type)
 {
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
@@ -2209,7 +2210,7 @@ esp_err_t rpc_eap_client_set_pac_file(const unsigned char *pac_file, int pac_fil
 	return rpc_rsp_callback(resp);
 }
 
-esp_err_t rpc_eap_client_set_fast_params(esp_eap_fast_config config)
+esp_err_t rpc_eap_client_set_fast_params(h_eap_fast_config_t config)
 {
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
@@ -2253,7 +2254,7 @@ esp_err_t rpc_eap_client_set_domain_name(const char *domain_name)
 }
 
 #if H_GOT_SET_EAP_METHODS_API
-esp_err_t rpc_eap_client_set_eap_methods(esp_eap_method_t methods)
+esp_err_t rpc_eap_client_set_eap_methods(h_eap_method_t methods)
 {
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;

@@ -15,8 +15,10 @@
  */
 #include "unity.h"
 #include "h_wifi_types.h"
+#include "esp_wifi.h"
 #include <string.h>
 #include <stdint.h>
+#include <stddef.h>
 
 /* ── Enum cardinality and value verification ── */
 
@@ -339,4 +341,19 @@ void test_wifi_vendor_ie_id_enum_values(void)
 {
     TEST_ASSERT_EQUAL(0, H_WIFI_VND_IE_ID_0);
     TEST_ASSERT_EQUAL(1, H_WIFI_VND_IE_ID_1);
+}
+
+void test_wifi_vendor_ie_data_layout_matches_native_stub(void)
+{
+    TEST_ASSERT_EQUAL(sizeof(vendor_ie_data_t), sizeof(h_wifi_vendor_ie_data_t));
+    TEST_ASSERT_EQUAL(offsetof(vendor_ie_data_t, element_id),
+                      offsetof(h_wifi_vendor_ie_data_t, element_id));
+    TEST_ASSERT_EQUAL(offsetof(vendor_ie_data_t, length),
+                      offsetof(h_wifi_vendor_ie_data_t, length));
+    TEST_ASSERT_EQUAL(offsetof(vendor_ie_data_t, vendor_oui),
+                      offsetof(h_wifi_vendor_ie_data_t, vendor_oui));
+    TEST_ASSERT_EQUAL(offsetof(vendor_ie_data_t, vendor_oui_type),
+                      offsetof(h_wifi_vendor_ie_data_t, vendor_oui_type));
+    TEST_ASSERT_EQUAL(offsetof(vendor_ie_data_t, payload),
+                      offsetof(h_wifi_vendor_ie_data_t, payload));
 }

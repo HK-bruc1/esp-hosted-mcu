@@ -75,8 +75,7 @@ h_err_t h_validate_contracts(void)
 #endif
 
     /* Wi-Fi conversion contract required functions */
-    if (!g_h_wifi.init_config_to_req || !g_h_wifi.config_to_req ||
-        !g_h_wifi.config_from_resp || !g_h_wifi.scan_config_to_req ||
+    if (!g_h_wifi.init_config_to_req || !g_h_wifi.scan_config_to_req ||
         !g_h_wifi.country_to_req || !g_h_wifi.ap_record_from_resp ||
         !g_h_wifi.ap_record_from_resp_list || !g_h_wifi.country_from_resp ||
         !g_h_wifi.sta_list_from_resp || !g_h_wifi.iface_to_native ||

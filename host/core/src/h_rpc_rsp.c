@@ -8,7 +8,7 @@
 #include "h_wrapper.h"
 #include "h_wifi_types.h"
 #include "h_rpc_core.h"
-#include "rpc_utils.h"
+#include "h_rpc_utils.h"
 #include "rpc_slave_if.h"
 #include "esp_hosted_transport.h"
 #include "h_config.h"
@@ -222,51 +222,32 @@ int rpc_parse_rsp(Rpc *rpc_msg, ctrl_cmd_t *app_resp)
 		}
 		break;
 	} case RPC_ID__Resp_WifiGetConfig: {
-		RPC_FAIL_ON_NULL(resp_wifi_set_config);
-		RPC_ERR_IN_RESP(resp_wifi_set_config);
+		RPC_FAIL_ON_NULL(resp_wifi_get_config);
+		RPC_ERR_IN_RESP(resp_wifi_get_config);
+		RPC_FAIL_ON_NULL(resp_wifi_get_config->cfg);
 
 		app_resp->u.wifi_config.iface = rpc_msg->resp_wifi_get_config->iface;
 
 		switch (app_resp->u.wifi_config.iface) {
 
-		case WIFI_IF_STA: {
-			wifi_sta_config_t * p_a_sta = &(app_resp->u.wifi_config.u.sta);
+		case H_WIFI_IF_STA: {
 			WifiStaConfig * p_c_sta = rpc_msg->resp_wifi_get_config->cfg->sta;
-			rpc_copy_wifi_sta_config(p_a_sta, p_c_sta);
+			RPC_FAIL_ON_NULL(resp_wifi_get_config->cfg->sta);
+			rpc_copy_wifi_sta_config(&app_resp->u.wifi_config.u, p_c_sta);
 			break;
 		}
-		case WIFI_IF_AP: {
-			wifi_ap_config_t * p_a_ap = &(app_resp->u.wifi_config.u.ap);
+		case H_WIFI_IF_AP: {
+			h_wifi_config_t *p_a = &app_resp->u.wifi_config.u;
 			WifiApConfig * p_c_ap = rpc_msg->resp_wifi_get_config->cfg->ap;
+			RPC_FAIL_ON_NULL(resp_wifi_get_config->cfg->ap);
 
-			RPC_RSP_COPY_BYTES(p_a_ap->ssid, p_c_ap->ssid);
-			RPC_RSP_COPY_BYTES(p_a_ap->password, p_c_ap->password);
-			p_a_ap->ssid_len = p_c_ap->ssid_len;
-			p_a_ap->channel = p_c_ap->channel;
-			p_a_ap->authmode = p_c_ap->authmode;
-			p_a_ap->ssid_hidden = p_c_ap->ssid_hidden;
-			p_a_ap->max_connection = p_c_ap->max_connection;
-			p_a_ap->beacon_interval = p_c_ap->beacon_interval;
-			p_a_ap->csa_count = p_c_ap->csa_count;
-			p_a_ap->dtim_period = p_c_ap->dtim_period;
-			p_a_ap->pairwise_cipher = p_c_ap->pairwise_cipher;
-			p_a_ap->ftm_responder = p_c_ap->ftm_responder;
-			if (p_c_ap->pmf_cfg) {
-				p_a_ap->pmf_cfg.capable = p_c_ap->pmf_cfg->capable;
-				p_a_ap->pmf_cfg.required = p_c_ap->pmf_cfg->required;
-			}
-			p_a_ap->sae_pwe_h2e = p_c_ap->sae_pwe_h2e;
-#if H_GOT_AP_CONFIG_PARAM_TRANSITION_DISABLE
-			p_a_ap->transition_disable = p_c_ap->transition_disable;
-#endif
-#if H_PRESENT_IN_ESP_IDF_5_5_0
-			p_a_ap->sae_ext = p_c_ap->sae_ext;
-			if (p_c_ap->bss_max_idle_cfg) {
-				p_a_ap->bss_max_idle_cfg.period = p_c_ap->bss_max_idle_cfg->period;
-				p_a_ap->bss_max_idle_cfg.protected_keep_alive = p_c_ap->bss_max_idle_cfg->protected_keep_alive;
-			}
-			p_a_ap->gtk_rekey_interval = p_c_ap->gtk_rekey_interval;
-#endif
+			RPC_RSP_COPY_BYTES(p_a->ap.ssid, p_c_ap->ssid);
+			RPC_RSP_COPY_BYTES(p_a->ap.password, p_c_ap->password);
+			p_a->ap.ssid_len = p_c_ap->ssid_len;
+			p_a->ap.channel = p_c_ap->channel;
+			p_a->ap.hidden_ssid = p_c_ap->ssid_hidden;
+			p_a->ap.max_connection = p_c_ap->max_connection;
+			p_a->ap.beacon_interval = p_c_ap->beacon_interval;
 			break;
 		}
 		default:

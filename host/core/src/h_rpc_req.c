@@ -14,6 +14,16 @@
 
 static const char *TAG = "rpc_req";
 
+static bool h_rpc_mac_is_set(const uint8_t mac[BSSID_BYTES_SIZE])
+{
+	for (size_t i = 0; i < BSSID_BYTES_SIZE; i++) {
+		if (mac[i] != 0) {
+			return true;
+		}
+	}
+	return false;
+}
+
 /* Note: Overflow return H_FAIL may leak buffers already registered in
  * app_req->rpc_free_buff_hdls[].  MAX_FREE_BUFF_HANDLES is sized to
  * prevent this; full cleanup would need compose_rpc_req() refactoring. */
@@ -136,7 +146,7 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 		RPC_ALLOC_ASSIGN(RpcReqSetMode, req_set_wifi_mode,
 				rpc__req__set_mode__init);
 
-		if ((p->mode < WIFI_MODE_NULL) || (p->mode >= WIFI_MODE_MAX)) {
+		if ((p->mode < H_WIFI_MODE_NULL) || (p->mode > H_WIFI_MODE_NAN)) {
 			H_LOGE(TAG, "Invalid wifi mode\n");
 			*failure_status = RPC_ERR_INCORRECT_ARG;
 			return H_FAIL;
@@ -243,145 +253,39 @@ int compose_rpc_req(Rpc *req, ctrl_cmd_t *app_req, int32_t *failure_status)
 
 		switch(req_payload->iface) {
 
-		case WIFI_IF_STA: {
+		case H_WIFI_IF_STA: {
 			req_payload->cfg->u_case = WIFI_CONFIG__U_STA;
 
-			wifi_sta_config_t *p_a_sta = &p_a->u.sta;
 			RPC_ALLOC_ELEMENT(WifiStaConfig, req_payload->cfg->sta, wifi_sta_config__init);
 			WifiStaConfig *p_c_sta = req_payload->cfg->sta;
-			RPC_REQ_COPY_STR(p_c_sta->ssid, p_a_sta->ssid, SSID_LENGTH);
+			RPC_REQ_COPY_STR(p_c_sta->ssid, p_a->u.sta.ssid, SSID_LENGTH);
 
-			RPC_REQ_COPY_STR(p_c_sta->password, p_a_sta->password, PASSWORD_LENGTH);
+			RPC_REQ_COPY_STR(p_c_sta->password, p_a->u.sta.password, PASSWORD_LENGTH);
 
-			p_c_sta->scan_method = p_a_sta->scan_method;
-			p_c_sta->bssid_set = p_a_sta->bssid_set;
+			p_c_sta->bssid_set = h_rpc_mac_is_set(p_a->u.sta.bssid);
 
-			if (p_a_sta->bssid_set)
-				RPC_REQ_COPY_BYTES(p_c_sta->bssid, p_a_sta->bssid, BSSID_BYTES_SIZE);
+			if (p_c_sta->bssid_set)
+				RPC_REQ_COPY_BYTES(p_c_sta->bssid, p_a->u.sta.bssid, BSSID_BYTES_SIZE);
 
-			p_c_sta->channel = p_a_sta->channel;
-			p_c_sta->listen_interval = p_a_sta->listen_interval;
-			p_c_sta->sort_method = p_a_sta->sort_method;
-			RPC_ALLOC_ELEMENT(WifiScanThreshold, p_c_sta->threshold, wifi_scan_threshold__init);
-			p_c_sta->threshold->rssi = p_a_sta->threshold.rssi;
-			p_c_sta->threshold->authmode = p_a_sta->threshold.authmode;
-#if H_PRESENT_IN_ESP_IDF_5_4_0
-			p_c_sta->threshold->rssi_5g_adjustment = p_a_sta->threshold.rssi_5g_adjustment;
-#endif
+			p_c_sta->channel = p_a->u.sta.channel;
+			p_c_sta->listen_interval = p_a->u.sta.listen_interval;
 			RPC_ALLOC_ELEMENT(WifiPmfConfig, p_c_sta->pmf_cfg, wifi_pmf_config__init);
-			p_c_sta->pmf_cfg->capable = p_a_sta->pmf_cfg.capable;
-			p_c_sta->pmf_cfg->required = p_a_sta->pmf_cfg.required;
-
-			if (p_a_sta->rm_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_1_rm_enabled, p_c_sta->bitmask);
-
-			if (p_a_sta->btm_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_1_btm_enabled, p_c_sta->bitmask);
-
-			if (p_a_sta->mbo_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_1_mbo_enabled, p_c_sta->bitmask);
-
-			if (p_a_sta->ft_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_1_ft_enabled, p_c_sta->bitmask);
-
-			if (p_a_sta->owe_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_1_owe_enabled, p_c_sta->bitmask);
-
-			if (p_a_sta->transition_disable)
-				H_SET_BIT(WIFI_STA_CONFIG_1_transition_disable, p_c_sta->bitmask);
-
-#if H_DECODE_WIFI_RESERVED_FIELD
-  #if H_WIFI_NEW_RESERVED_FIELD_NAMES
-			WIFI_STA_CONFIG_2_SET_RESERVED_VAL(p_a_sta->reserved2, p_c_sta->he_bitmask);
-  #else
-			WIFI_STA_CONFIG_2_SET_RESERVED_VAL(p_a_sta->he_reserved, p_c_sta->he_bitmask);
-  #endif
-#endif
-
-			p_c_sta->sae_pwe_h2e = p_a_sta->sae_pwe_h2e;
-			p_c_sta->sae_pk_mode = p_a_sta->sae_pk_mode;
-			p_c_sta->failure_retry_cnt = p_a_sta->failure_retry_cnt;
-
-			if (p_a_sta->he_dcm_set)
-				H_SET_BIT(WIFI_STA_CONFIG_2_he_dcm_set_BIT, p_c_sta->he_bitmask);
-
-			// WIFI_HE_STA_CONFIG_he_dcm_max_constellation_tx is two bits wide
-			if (p_a_sta->he_dcm_max_constellation_tx)
-				p_c_sta->he_bitmask |= ((p_a_sta->he_dcm_max_constellation_tx & 0x03) << WIFI_STA_CONFIG_2_he_dcm_max_constellation_tx_BITS);
-
-			// WIFI_HE_STA_CONFIG_he_dcm_max_constellation_rx is two bits wide
-			if (p_a_sta->he_dcm_max_constellation_rx)
-				p_c_sta->he_bitmask |= ((p_a_sta->he_dcm_max_constellation_rx & 0x03) << WIFI_STA_CONFIG_2_he_dcm_max_constellation_rx_BITS);
-
-			if (p_a_sta->he_mcs9_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_he_mcs9_enabled_BIT, p_c_sta->he_bitmask);
-
-			if (p_a_sta->he_su_beamformee_disabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_he_su_beamformee_disabled_BIT, p_c_sta->he_bitmask);
-
-			if (p_a_sta->he_trig_su_bmforming_feedback_disabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_he_trig_su_bmforming_feedback_disabled_BIT, p_c_sta->he_bitmask);
-
-			if (p_a_sta->he_trig_mu_bmforming_partial_feedback_disabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_he_trig_mu_bmforming_partial_feedback_disabled_BIT, p_c_sta->he_bitmask);
-
-			if (p_a_sta->he_trig_cqi_feedback_disabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_he_trig_cqi_feedback_disabled_BIT, p_c_sta->he_bitmask);
-
-#if H_PRESENT_IN_ESP_IDF_5_5_0
-			if (p_a_sta->vht_su_beamformee_disabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_vht_su_beamformee_disabled, p_c_sta->he_bitmask);
-
-			if (p_a_sta->vht_mu_beamformee_disabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_vht_mu_beamformee_disabled, p_c_sta->he_bitmask);
-
-			if (p_a_sta->vht_mcs8_enabled)
-				H_SET_BIT(WIFI_STA_CONFIG_2_vht_mcs8_enabled, p_c_sta->he_bitmask);
-#endif
-
-#if H_DECODE_WIFI_RESERVED_FIELD
-  #if H_WIFI_NEW_RESERVED_FIELD_NAMES
-			WIFI_STA_CONFIG_2_SET_RESERVED_VAL(p_a_sta->reserved2, p_c_sta->he_bitmask);
-  #else
-			WIFI_STA_CONFIG_2_SET_RESERVED_VAL(p_a_sta->he_reserved, p_c_sta->he_bitmask);
-  #endif
-#endif
-
-			RPC_REQ_COPY_BYTES(p_c_sta->sae_h2e_identifier, p_a_sta->sae_h2e_identifier, SAE_H2E_IDENTIFIER_LEN);
+			p_c_sta->pmf_cfg->capable = p_a->u.sta.pmf_cfg_capable ? true : false;
+			p_c_sta->pmf_cfg->required = p_a->u.sta.pmf_cfg_required ? true : false;
 			break;
-		} case WIFI_IF_AP: {
+		} case H_WIFI_IF_AP: {
 			req_payload->cfg->u_case = WIFI_CONFIG__U_AP;
 
-			wifi_ap_config_t * p_a_ap = &p_a->u.ap;
 			RPC_ALLOC_ELEMENT(WifiApConfig, req_payload->cfg->ap, wifi_ap_config__init);
 			WifiApConfig * p_c_ap = req_payload->cfg->ap;
 
-			RPC_REQ_COPY_STR(p_c_ap->ssid, p_a_ap->ssid, SSID_LENGTH);
-			RPC_REQ_COPY_STR(p_c_ap->password, p_a_ap->password, PASSWORD_LENGTH);
-			p_c_ap->ssid_len = p_a_ap->ssid_len;
-			p_c_ap->channel = p_a_ap->channel;
-			p_c_ap->authmode = p_a_ap->authmode;
-			p_c_ap->ssid_hidden = p_a_ap->ssid_hidden;
-			p_c_ap->max_connection = p_a_ap->max_connection;
-			p_c_ap->beacon_interval = p_a_ap->beacon_interval;
-			p_c_ap->csa_count = p_a_ap->csa_count;
-			p_c_ap->dtim_period = p_a_ap->dtim_period;
-			p_c_ap->pairwise_cipher = p_a_ap->pairwise_cipher;
-			p_c_ap->ftm_responder = p_a_ap->ftm_responder;
-			RPC_ALLOC_ELEMENT(WifiPmfConfig, p_c_ap->pmf_cfg, wifi_pmf_config__init);
-			p_c_ap->pmf_cfg->capable = p_a_ap->pmf_cfg.capable;
-			p_c_ap->pmf_cfg->required = p_a_ap->pmf_cfg.required;
-			p_c_ap->sae_pwe_h2e = p_a_ap->sae_pwe_h2e;
-#if H_GOT_AP_CONFIG_PARAM_TRANSITION_DISABLE
-			p_c_ap->transition_disable = p_a_ap->transition_disable;
-#endif
-#if H_PRESENT_IN_ESP_IDF_5_5_0
-			p_c_ap->sae_ext = p_a_ap->sae_ext;
-			RPC_ALLOC_ELEMENT(WifiBssMaxIdleConfig, p_c_ap->bss_max_idle_cfg, wifi_bss_max_idle_config__init);
-			p_c_ap->bss_max_idle_cfg->period = p_a_ap->bss_max_idle_cfg.period;
-			p_c_ap->bss_max_idle_cfg->protected_keep_alive = p_a_ap->bss_max_idle_cfg.protected_keep_alive;
-			p_c_ap->gtk_rekey_interval = p_a_ap->gtk_rekey_interval;
-#endif
+			RPC_REQ_COPY_STR(p_c_ap->ssid, p_a->u.ap.ssid, SSID_LENGTH);
+			RPC_REQ_COPY_STR(p_c_ap->password, p_a->u.ap.password, PASSWORD_LENGTH);
+			p_c_ap->ssid_len = p_a->u.ap.ssid_len;
+			p_c_ap->channel = p_a->u.ap.channel;
+			p_c_ap->ssid_hidden = p_a->u.ap.hidden_ssid;
+			p_c_ap->max_connection = p_a->u.ap.max_connection;
+			p_c_ap->beacon_interval = p_a->u.ap.beacon_interval;
 			break;
         } default: {
             H_LOGE(TAG, "unexpected wifi iface [%u]\n", p_a->iface);

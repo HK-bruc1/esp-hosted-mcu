@@ -183,19 +183,15 @@ typedef struct {
 } h_transport_contract_t;
 
 /* ── Wi-Fi Type Conversion Contract ──
- * Bridges h_wifi_* portable types to/from ctrl_cmd_t union members. Some
- * union members are portable h_wifi_* storage; others still use platform
- * native Wi-Fi storage while the transition is in progress. Core code calls
- * these exclusively through h_wrapper.h; ports own the field-level mapping. */
+ * Bridges h_wifi_* portable types to/from ctrl_cmd_t union members. Core
+ * storage is portable; ESP-IDF native conversions live at the API/port edge. */
 typedef struct {
-    /* Struct: portable -> protobuf union (native-sized) */
+    /* Struct: portable -> request storage */
     void (*init_config_to_req)(const h_wifi_init_config_t *src, void *req_wifi_init_config);
-    void (*config_to_req)(const h_wifi_config_t *src, void *req_wifi_config_u);
-    void (*config_from_resp)(const void *resp_wifi_config_u, h_wifi_config_t *dst);
     void (*scan_config_to_req)(const h_wifi_scan_config_t *src, void *req_wifi_scan_config_cfg);
     void (*country_to_req)(const h_wifi_country_t *src, void *req_wifi_country);
 
-    /* Struct: protobuf union (native-sized) -> portable */
+    /* Struct: response storage -> portable */
     void (*ap_record_from_resp)(const void *resp_wifi_ap_record, h_wifi_ap_record_t *dst);
     void (*ap_record_from_resp_list)(const void *resp_wifi_scan_ap_list_out_list, h_wifi_ap_record_t *dst);
     void (*country_from_resp)(const void *resp_wifi_country, h_wifi_country_t *dst);

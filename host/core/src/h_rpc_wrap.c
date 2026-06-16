@@ -608,10 +608,10 @@ int rpc_rsp_callback(ctrl_cmd_t * app_resp)
 		H_LOGV(TAG, "Wifi power save mode is: ");
 
 		switch(app_resp->u.wifi_ps.ps_mode) {
-			case WIFI_PS_MIN_MODEM:
+			case H_WIFI_PS_MIN_MODEM:
 				H_LOGV(TAG, "Min");
 				break;
-			case WIFI_PS_MAX_MODEM:
+			case H_WIFI_PS_MAX_MODEM:
 				H_LOGV(TAG, "Max");
 				break;
 			default:
@@ -1467,9 +1467,9 @@ int rpc_wifi_set_config(h_wifi_interface_t interface, h_wifi_config_t *conf)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-	h_wifi_config_to_req(conf, &req->u.wifi_config.u);
+	req->u.wifi_config.u = *conf;
 
-	req->u.wifi_config.iface = h_wifi_iface_to_native(interface);
+	req->u.wifi_config.iface = interface;
 	resp = rpc_slaveif_wifi_set_config(req);
 	return rpc_rsp_callback(resp);
 }
@@ -1483,12 +1483,12 @@ int rpc_wifi_get_config(h_wifi_interface_t interface, h_wifi_config_t *conf)
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
 
-	req->u.wifi_config.iface = h_wifi_iface_to_native(interface);
+	req->u.wifi_config.iface = interface;
 
 	resp = rpc_slaveif_wifi_get_config(req);
 
 	if (resp && resp->resp_event_status == SUCCESS) {
-		h_wifi_config_from_resp(&resp->u.wifi_config.u, conf);
+		*conf = resp->u.wifi_config.u;
 	}
 
 	return rpc_rsp_callback(resp);
@@ -2172,7 +2172,7 @@ h_err_t rpc_eap_client_get_disable_time_check(bool *disable)
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_eap_client_set_ttls_phase2_method(esp_eap_ttls_phase2_types type)
+h_err_t rpc_eap_client_set_ttls_phase2_method(h_eap_ttls_phase2_types_t type)
 {
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
@@ -2207,7 +2207,7 @@ h_err_t rpc_eap_client_set_pac_file(const unsigned char *pac_file, int pac_file_
 	return rpc_rsp_callback(resp);
 }
 
-h_err_t rpc_eap_client_set_fast_params(esp_eap_fast_config config)
+h_err_t rpc_eap_client_set_fast_params(h_eap_fast_config_t config)
 {
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;
@@ -2251,7 +2251,7 @@ h_err_t rpc_eap_client_set_domain_name(const char *domain_name)
 }
 
 #if H_GOT_SET_EAP_METHODS_API
-h_err_t rpc_eap_client_set_eap_methods(esp_eap_method_t methods)
+h_err_t rpc_eap_client_set_eap_methods(h_eap_method_t methods)
 {
 	ctrl_cmd_t *req = RPC_DEFAULT_REQ();
 	ctrl_cmd_t *resp = NULL;

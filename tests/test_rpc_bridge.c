@@ -3,18 +3,28 @@
  */
 #include "unity.h"
 #include "h_types.h"
+#include "h_wifi_types.h"
 #include "rpc_core.h"
 #include "h_control_serial_adapter.h"
 #include "esp_hosted_rpc.pb-c.h"
-#include "esp_wifi.h"  /* mock stub: wifi_sta_config_t */
 #include <string.h>
+#include <stdlib.h>
 
 /* Forward declarations — avoid pulling old ESP-IDF headers */
-extern int rpc_copy_wifi_sta_config(wifi_sta_config_t *dst, WifiStaConfig *src);
+extern int rpc_copy_wifi_sta_config(h_wifi_config_t *dst, WifiStaConfig *src);
 extern int rpc_init(void);
 extern int rpc_start(void);
 extern int rpc_stop(void);
 extern int rpc_deinit(void);
+
+static void free_rpc_allocs(ctrl_cmd_t *msg)
+{
+    for (uint8_t i = 0; i < msg->n_rpc_free_buff_hdls; i++) {
+        free(msg->rpc_free_buff_hdls[i]);
+        msg->rpc_free_buff_hdls[i] = NULL;
+    }
+    msg->n_rpc_free_buff_hdls = 0;
+}
 
 /* ── h_rpc_rsp.c: rpc_parse_rsp ── */
 void test_rpc_parse_rsp_null(void)
@@ -108,11 +118,189 @@ void test_compose_rpc_req_simple(void)
     TEST_ASSERT_EQUAL(H_OK, ret);
 }
 
+void test_compose_rpc_req_wifi_set_config_sta_uses_portable_config(void)
+{
+    Rpc req = {0};
+    ctrl_cmd_t app_req = {0};
+    int32_t failure_status = 0;
+    uint8_t ssid_data[] = "portable_sta";
+    uint8_t pwd_data[] = "portable_pass";
+    uint8_t bssid_data[] = {0x02, 0x11, 0x22, 0x33, 0x44, 0x55};
+
+    rpc__init(&req);
+    req.msg_id = RPC_ID__Req_WifiSetConfig;
+    app_req.u.wifi_config.iface = H_WIFI_IF_STA;
+    memcpy(app_req.u.wifi_config.u.sta.ssid, ssid_data, sizeof(ssid_data) - 1);
+    memcpy(app_req.u.wifi_config.u.sta.password, pwd_data, sizeof(pwd_data) - 1);
+    memcpy(app_req.u.wifi_config.u.sta.bssid, bssid_data, sizeof(bssid_data));
+    app_req.u.wifi_config.u.sta.ssid_len = sizeof(ssid_data) - 1;
+    app_req.u.wifi_config.u.sta.channel = 11;
+    app_req.u.wifi_config.u.sta.listen_interval = 7;
+    app_req.u.wifi_config.u.sta.pmf_cfg_capable = 1;
+    app_req.u.wifi_config.u.sta.pmf_cfg_required = 1;
+
+    int ret = compose_rpc_req(&req, &app_req, &failure_status);
+
+    TEST_ASSERT_EQUAL(H_OK, ret);
+    TEST_ASSERT_EQUAL(0, failure_status);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config);
+    TEST_ASSERT_EQUAL(H_WIFI_IF_STA, req.req_wifi_set_config->iface);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config->cfg);
+    TEST_ASSERT_EQUAL(WIFI_CONFIG__U_STA, req.req_wifi_set_config->cfg->u_case);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config->cfg->sta);
+    TEST_ASSERT_EQUAL_MEMORY(ssid_data, req.req_wifi_set_config->cfg->sta->ssid.data,
+                             sizeof(ssid_data) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(pwd_data, req.req_wifi_set_config->cfg->sta->password.data,
+                             sizeof(pwd_data) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(bssid_data, req.req_wifi_set_config->cfg->sta->bssid.data,
+                             sizeof(bssid_data));
+    TEST_ASSERT_EQUAL_UINT32(11, req.req_wifi_set_config->cfg->sta->channel);
+    TEST_ASSERT_EQUAL_UINT32(7, req.req_wifi_set_config->cfg->sta->listen_interval);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config->cfg->sta->pmf_cfg);
+    TEST_ASSERT_TRUE(req.req_wifi_set_config->cfg->sta->pmf_cfg->capable);
+    TEST_ASSERT_TRUE(req.req_wifi_set_config->cfg->sta->pmf_cfg->required);
+
+    free_rpc_allocs(&app_req);
+}
+
+void test_compose_rpc_req_wifi_set_config_ap_uses_portable_config(void)
+{
+    Rpc req = {0};
+    ctrl_cmd_t app_req = {0};
+    int32_t failure_status = 0;
+    uint8_t ssid_data[] = "portable_ap";
+    uint8_t pwd_data[] = "ap_pass";
+
+    rpc__init(&req);
+    req.msg_id = RPC_ID__Req_WifiSetConfig;
+    app_req.u.wifi_config.iface = H_WIFI_IF_AP;
+    memcpy(app_req.u.wifi_config.u.ap.ssid, ssid_data, sizeof(ssid_data) - 1);
+    memcpy(app_req.u.wifi_config.u.ap.password, pwd_data, sizeof(pwd_data) - 1);
+    app_req.u.wifi_config.u.ap.ssid_len = sizeof(ssid_data) - 1;
+    app_req.u.wifi_config.u.ap.channel = 6;
+    app_req.u.wifi_config.u.ap.hidden_ssid = 1;
+    app_req.u.wifi_config.u.ap.max_connection = 4;
+    app_req.u.wifi_config.u.ap.beacon_interval = 200;
+
+    int ret = compose_rpc_req(&req, &app_req, &failure_status);
+
+    TEST_ASSERT_EQUAL(H_OK, ret);
+    TEST_ASSERT_EQUAL(0, failure_status);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config);
+    TEST_ASSERT_EQUAL(H_WIFI_IF_AP, req.req_wifi_set_config->iface);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config->cfg);
+    TEST_ASSERT_EQUAL(WIFI_CONFIG__U_AP, req.req_wifi_set_config->cfg->u_case);
+    TEST_ASSERT_NOT_NULL(req.req_wifi_set_config->cfg->ap);
+    TEST_ASSERT_EQUAL_MEMORY(ssid_data, req.req_wifi_set_config->cfg->ap->ssid.data,
+                             sizeof(ssid_data) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(pwd_data, req.req_wifi_set_config->cfg->ap->password.data,
+                             sizeof(pwd_data) - 1);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(ssid_data) - 1, req.req_wifi_set_config->cfg->ap->ssid_len);
+    TEST_ASSERT_EQUAL_UINT32(6, req.req_wifi_set_config->cfg->ap->channel);
+    TEST_ASSERT_EQUAL_UINT32(1, req.req_wifi_set_config->cfg->ap->ssid_hidden);
+    TEST_ASSERT_EQUAL_UINT32(4, req.req_wifi_set_config->cfg->ap->max_connection);
+    TEST_ASSERT_EQUAL_UINT32(200, req.req_wifi_set_config->cfg->ap->beacon_interval);
+
+    free_rpc_allocs(&app_req);
+}
+
 void test_compose_rpc_req_null(void)
 {
     int32_t failure_status = 0;
     /* Contract: NULL req crashes (no guard), so we only test with valid ptrs */
     (void)failure_status;
+}
+
+void test_rpc_parse_rsp_wifi_get_config_sta_populates_portable_config(void)
+{
+    Rpc rpc_msg = {0};
+    ctrl_cmd_t app_resp = {0};
+    RpcRespWifiGetConfig resp = RPC__RESP__WIFI_GET_CONFIG__INIT;
+    WifiConfig cfg = WIFI_CONFIG__INIT;
+    WifiStaConfig sta = WIFI_STA_CONFIG__INIT;
+    WifiPmfConfig pmf = WIFI_PMF_CONFIG__INIT;
+    uint8_t ssid_data[] = "rsp_sta";
+    uint8_t pwd_data[] = "rsp_pass";
+    uint8_t bssid_data[] = {0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F};
+
+    rpc__init(&rpc_msg);
+    rpc_msg.msg_id = RPC_ID__Resp_WifiGetConfig;
+    rpc_msg.resp_wifi_get_config = &resp;
+    resp.resp = H_OK;
+    resp.iface = H_WIFI_IF_STA;
+    resp.cfg = &cfg;
+    cfg.u_case = WIFI_CONFIG__U_STA;
+    cfg.sta = &sta;
+    sta.ssid.data = ssid_data;
+    sta.ssid.len = sizeof(ssid_data) - 1;
+    sta.password.data = pwd_data;
+    sta.password.len = sizeof(pwd_data) - 1;
+    sta.bssid.data = bssid_data;
+    sta.bssid.len = sizeof(bssid_data);
+    sta.channel = 3;
+    sta.listen_interval = 9;
+    sta.pmf_cfg = &pmf;
+    pmf.capable = true;
+    pmf.required = true;
+
+    int ret = rpc_parse_rsp(&rpc_msg, &app_resp);
+
+    TEST_ASSERT_EQUAL(H_OK, ret);
+    TEST_ASSERT_EQUAL(H_WIFI_IF_STA, app_resp.u.wifi_config.iface);
+    TEST_ASSERT_EQUAL_MEMORY(ssid_data, app_resp.u.wifi_config.u.sta.ssid,
+                             sizeof(ssid_data) - 1);
+    TEST_ASSERT_EQUAL_UINT8(sizeof(ssid_data) - 1, app_resp.u.wifi_config.u.sta.ssid_len);
+    TEST_ASSERT_EQUAL_MEMORY(pwd_data, app_resp.u.wifi_config.u.sta.password,
+                             sizeof(pwd_data) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(bssid_data, app_resp.u.wifi_config.u.sta.bssid,
+                             sizeof(bssid_data));
+    TEST_ASSERT_EQUAL_UINT8(3, app_resp.u.wifi_config.u.sta.channel);
+    TEST_ASSERT_EQUAL_UINT8(9, app_resp.u.wifi_config.u.sta.listen_interval);
+    TEST_ASSERT_EQUAL_UINT8(1, app_resp.u.wifi_config.u.sta.pmf_cfg_capable);
+    TEST_ASSERT_EQUAL_UINT8(1, app_resp.u.wifi_config.u.sta.pmf_cfg_required);
+}
+
+void test_rpc_parse_rsp_wifi_get_config_ap_populates_portable_config(void)
+{
+    Rpc rpc_msg = {0};
+    ctrl_cmd_t app_resp = {0};
+    RpcRespWifiGetConfig resp = RPC__RESP__WIFI_GET_CONFIG__INIT;
+    WifiConfig cfg = WIFI_CONFIG__INIT;
+    WifiApConfig ap = WIFI_AP_CONFIG__INIT;
+    uint8_t ssid_data[] = "rsp_ap";
+    uint8_t pwd_data[] = "rsp_ap_pass";
+
+    rpc__init(&rpc_msg);
+    rpc_msg.msg_id = RPC_ID__Resp_WifiGetConfig;
+    rpc_msg.resp_wifi_get_config = &resp;
+    resp.resp = H_OK;
+    resp.iface = H_WIFI_IF_AP;
+    resp.cfg = &cfg;
+    cfg.u_case = WIFI_CONFIG__U_AP;
+    cfg.ap = &ap;
+    ap.ssid.data = ssid_data;
+    ap.ssid.len = sizeof(ssid_data) - 1;
+    ap.password.data = pwd_data;
+    ap.password.len = sizeof(pwd_data) - 1;
+    ap.ssid_len = sizeof(ssid_data) - 1;
+    ap.channel = 8;
+    ap.ssid_hidden = 1;
+    ap.max_connection = 5;
+    ap.beacon_interval = 300;
+
+    int ret = rpc_parse_rsp(&rpc_msg, &app_resp);
+
+    TEST_ASSERT_EQUAL(H_OK, ret);
+    TEST_ASSERT_EQUAL(H_WIFI_IF_AP, app_resp.u.wifi_config.iface);
+    TEST_ASSERT_EQUAL_MEMORY(ssid_data, app_resp.u.wifi_config.u.ap.ssid,
+                             sizeof(ssid_data) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(pwd_data, app_resp.u.wifi_config.u.ap.password,
+                             sizeof(pwd_data) - 1);
+    TEST_ASSERT_EQUAL_UINT8(sizeof(ssid_data) - 1, app_resp.u.wifi_config.u.ap.ssid_len);
+    TEST_ASSERT_EQUAL_UINT8(8, app_resp.u.wifi_config.u.ap.channel);
+    TEST_ASSERT_EQUAL_UINT8(1, app_resp.u.wifi_config.u.ap.hidden_ssid);
+    TEST_ASSERT_EQUAL_UINT8(5, app_resp.u.wifi_config.u.ap.max_connection);
+    TEST_ASSERT_EQUAL_UINT16(300, app_resp.u.wifi_config.u.ap.beacon_interval);
 }
 
 /* ── h_control_serial_adapter.c: serial driver ── */
@@ -162,8 +350,9 @@ void test_rpc_init_start_stop_deinit(void)
 /* ── h_rpc_utils.c: rpc_copy_wifi_sta_config ── */
 void test_rpc_copy_wifi_sta_config_basic(void)
 {
-    wifi_sta_config_t dst = {0};
+    h_wifi_config_t dst = {0};
     WifiStaConfig src = WIFI_STA_CONFIG__INIT;
+    WifiPmfConfig pmf = WIFI_PMF_CONFIG__INIT;
 
     uint8_t ssid_data[] = "test_ssid";
     uint8_t pwd_data[] = "test_pass";
@@ -180,6 +369,9 @@ void test_rpc_copy_wifi_sta_config_basic(void)
     src.channel = 6;
     src.listen_interval = 3;
     src.sort_method = 2;
+    src.pmf_cfg = &pmf;
+    pmf.capable = true;
+    pmf.required = true;
     /* bitmask bits: rm=0, btm=1, mbo=2, ft=3, owe=4, transition_disable=5 */
     src.bitmask = (1U << 0) | (1U << 1) | (1U << 2) | (1U << 3) | (1U << 4) | (1U << 5);
     /* he_bitmask: he_dcm_set=0, he_dcm_max_constellation_tx[1:0]=2@bit1, he_dcm_max_constellation_rx[1:0]=3@bit3,
@@ -194,33 +386,15 @@ void test_rpc_copy_wifi_sta_config_basic(void)
     /* Function currently always returns H_FAIL (legacy behavior) */
     TEST_ASSERT_EQUAL(H_FAIL, ret);
 
-    /* Verify scalar fields were copied */
-    TEST_ASSERT_EQUAL(1, dst.scan_method);
-    TEST_ASSERT_EQUAL(1, dst.bssid_set);
-    TEST_ASSERT_EQUAL(6, dst.channel);
-    TEST_ASSERT_EQUAL(3, dst.listen_interval);
-    TEST_ASSERT_EQUAL(2, dst.sort_method);
-    TEST_ASSERT_EQUAL(1, dst.sae_pwe_h2e);
-    TEST_ASSERT_EQUAL(2, dst.sae_pk_mode);
-    TEST_ASSERT_EQUAL(5, dst.failure_retry_cnt);
+    /* Verify portable scalar fields were copied */
+    TEST_ASSERT_EQUAL(6, dst.sta.channel);
+    TEST_ASSERT_EQUAL(3, dst.sta.listen_interval);
+    TEST_ASSERT_EQUAL(1, dst.sta.pmf_cfg_capable);
+    TEST_ASSERT_EQUAL(1, dst.sta.pmf_cfg_required);
 
     /* Verify binary data was copied */
-    TEST_ASSERT_EQUAL_MEMORY(ssid_data, dst.ssid, sizeof(ssid_data) - 1);
-    TEST_ASSERT_EQUAL_MEMORY(pwd_data, dst.password, sizeof(pwd_data) - 1);
-    TEST_ASSERT_EQUAL_MEMORY(bssid_data, dst.bssid, 6);
-
-    /* Verify bitmask feature flags */
-    TEST_ASSERT_EQUAL(1, dst.rm_enabled);
-    TEST_ASSERT_EQUAL(1, dst.btm_enabled);
-    TEST_ASSERT_EQUAL(1, dst.mbo_enabled);
-    TEST_ASSERT_EQUAL(1, dst.ft_enabled);
-    TEST_ASSERT_EQUAL(1, dst.owe_enabled);
-    TEST_ASSERT_EQUAL(1, dst.transition_disable);
-
-    /* Verify HE bitmask fields */
-    TEST_ASSERT_EQUAL(1, dst.he_dcm_set);
-    TEST_ASSERT_EQUAL(2, dst.he_dcm_max_constellation_tx);
-    TEST_ASSERT_EQUAL(3, dst.he_dcm_max_constellation_rx);
-    TEST_ASSERT_EQUAL(1, dst.he_mcs9_enabled);
-    TEST_ASSERT_EQUAL(1, dst.he_su_beamformee_disabled);
+    TEST_ASSERT_EQUAL_MEMORY(ssid_data, dst.sta.ssid, sizeof(ssid_data) - 1);
+    TEST_ASSERT_EQUAL_UINT8(sizeof(ssid_data) - 1, dst.sta.ssid_len);
+    TEST_ASSERT_EQUAL_MEMORY(pwd_data, dst.sta.password, sizeof(pwd_data) - 1);
+    TEST_ASSERT_EQUAL_MEMORY(bssid_data, dst.sta.bssid, 6);
 }

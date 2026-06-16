@@ -89,7 +89,7 @@ echo -e "${BOLD}-- Check 2: ESP-IDF native type usage in core (beyond check_core
 # Types that check_core_isolation.sh does NOT currently catch (commented-out or
 # only checking direct includes).  This check uses report-only by default;
 # --strict makes it a failure.
-C2_PATTERN='\besp_supp_dpp_[A-Za-z0-9_]*\b|\bsupp_wifi_event_[A-Za-z0-9_]*\b|\bwifi_event_[A-Za-z0-9_]*\b|\bWIFI_EVENT_[A-Z0-9_]*\b|\bwifi_init_config_t\b|\bwifi_config_t\b|\bwifi_ap_record_t\b|\bwifi_scan_config_t\b|\bwifi_sta_list_t\b|\bwifi_country_t\b|\bwifi_phy_mode_t\b|\bwifi_storage_t\b|\bwifi_second_chan_t\b|\bwifi_band_t\b|\bwifi_band_mode_t\b|\bwifi_protocols_t\b|\bwifi_bandwidths_t\b|\bwifi_twt_config_t\b|\bwifi_twt_setup_config_t\b|\bwifi_itwt_setup_config_t\b|\besp_hosted_event_init_t\b|\bESP_HOSTED_EVENT_[A-Za-z0-9_]*\b|\bCONFIG_ESP_HOSTED_[A-Za-z0-9_]*\b|\bCONFIG_ESP_WIFI_[A-Za-z0-9_]*\b'
+C2_PATTERN='\besp_supp_dpp_[A-Za-z0-9_]*\b|\besp_eap_[A-Za-z0-9_]*\b|\bsupp_wifi_event_[A-Za-z0-9_]*\b|\bwifi_event_[A-Za-z0-9_]*\b|\bWIFI_EVENT_[A-Z0-9_]*\b|\bwifi_init_config_t\b|\bwifi_config_t\b|\bwifi_sta_config_t\b|\bwifi_ap_config_t\b|\bwifi_ap_record_t\b|\bwifi_scan_config_t\b|\bwifi_sta_list_t\b|\bwifi_country_t\b|\bwifi_phy_mode_t\b|\bwifi_storage_t\b|\bwifi_second_chan_t\b|\bwifi_band_t\b|\bwifi_band_mode_t\b|\bwifi_protocols_t\b|\bwifi_bandwidths_t\b|\bwifi_twt_config_t\b|\bwifi_twt_setup_config_t\b|\bwifi_itwt_setup_config_t\b|\besp_hosted_event_init_t\b|\bESP_HOSTED_EVENT_[A-Za-z0-9_]*\b|\bCONFIG_ESP_HOSTED_[A-Za-z0-9_]*\b|\bCONFIG_ESP_WIFI_[A-Za-z0-9_]*\b'
 
 C2_HITS=""
 for f in "${CORE_SRC_DIR}"/*.c; do
@@ -126,8 +126,8 @@ else
 
     echo "   Per-category count:"
     wifi_event_id_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\bWIFI_EVENT_[A-Z0-9_]*\b' || true)"
-    wifi_event_payload_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\b(wifi_event_|supp_wifi_event_|esp_supp_dpp_)[A-Za-z0-9_]*\b' || true)"
-    wifi_native_struct_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\bwifi_(init_config|config|ap_record|scan_config|sta_list|country|phy_mode|storage|second_chan|band|band_mode|protocols|bandwidths|twt_config|twt_setup_config|itwt_setup_config)_t\b' || true)"
+    wifi_event_payload_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\b(wifi_event_|supp_wifi_event_|esp_supp_dpp_|esp_eap_)[A-Za-z0-9_]*\b' || true)"
+    wifi_native_struct_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\bwifi_(init_config|config|sta_config|ap_config|ap_record|scan_config|sta_list|country|phy_mode|storage|second_chan|band|band_mode|protocols|bandwidths|twt_config|twt_setup_config|itwt_setup_config)_t\b' || true)"
     esp_hosted_config_count="$(printf '%s\n' "$C2_HITS" | grep -Ec '\b(ESP_HOSTED_EVENT_|CONFIG_ESP_HOSTED_|CONFIG_ESP_WIFI_)[A-Za-z0-9_]*\b' || true)"
     printf '     WIFI_EVENT_* ids: %s\n' "$wifi_event_id_count"
     printf '     Wi-Fi event payload types: %s\n' "$wifi_event_payload_count"
@@ -177,7 +177,8 @@ for f in "${CORE_SRC_DIR}"/*.c; do
         header_path=""
         for dir in "${CORE_INC_DIR}/h_public" "${CORE_INC_DIR}/h_internal" \
                    "host/port/include" "host" "host/api/include" \
-                   "host/port/esp-idf" "common" "common/transport" \
+                   "host/port/esp-idf" "host/drivers/rpc/slaveif" \
+                   "host/drivers/rpc/core" "host/drivers/rpc/wrap" "common" "common/transport" \
                    "common/rpc" "common/proto" "common/log" "common/mempool/include"; do
             if [ -f "${dir}/${inc_header}" ]; then
                 header_path="${dir}/${inc_header}"

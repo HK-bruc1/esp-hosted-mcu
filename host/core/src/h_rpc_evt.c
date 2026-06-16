@@ -6,7 +6,6 @@
 
 #include <inttypes.h>
 #include "h_rpc_core.h"
-#include "rpc_utils.h"
 #include "rpc_slave_if.h"
 #include "esp_hosted_transport.h"
 #include "h_config.h"

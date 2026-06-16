@@ -10,19 +10,12 @@
 
 #include <stdbool.h>
 #include "esp_hosted_rpc.pb-c.h"
-#include "esp_wifi_types.h"
-#include "esp_hosted_misc.h"
 #include "esp_hosted_misc_types.h"
 #include "h_port_config.h"
 #include "h_event.h"
 #include "h_wifi_types.h"
 #include "h_dpp_types.h"
-#if H_WIFI_ENTERPRISE_SUPPORT
-#include "esp_eap_client.h"
-#endif
-#if H_DPP_SUPPORT
-#include "esp_dpp.h"
-#endif
+#include "h_eap_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -118,7 +111,7 @@ typedef struct {
 
 typedef struct {
 	uint8_t iface;
-	wifi_config_t u;
+	h_wifi_config_t u;
 } wifi_cfg_t;
 
 
@@ -162,7 +155,7 @@ typedef struct {
 	bool enable;
 	h_wifi_vendor_ie_type_t type;
 	h_wifi_vendor_ie_id_t idx;
-	vendor_ie_data_t vnd_ie;
+	h_wifi_vendor_ie_data_t vnd_ie;
 } wifi_softap_vendor_ie_t;
 
 typedef struct {
@@ -290,7 +283,7 @@ typedef struct {
 } supp_wifi_event_dpp_uri_ready_t;
 
 typedef struct {
-	wifi_config_t wifi_cfg;                  /**< Received WIFI config in DPP */
+	h_wifi_config_t wifi_cfg;                /**< Received WIFI config in DPP */
 } supp_wifi_event_dpp_config_received_t;
 
 typedef struct {
@@ -581,13 +574,13 @@ typedef struct Ctrl_cmd_t {
 
 		rpc_eap_disable_time_check_t  eap_disable_time_check;
 
-		esp_eap_ttls_phase2_types     eap_ttls_phase2;
+		h_eap_ttls_phase2_types_t     eap_ttls_phase2;
 
 		rpc_eap_suiteb_192bit_t       eap_suiteb_192bit;
 
 		rpc_eap_pac_file_t            eap_pac_file;
 
-		esp_eap_fast_config           eap_fast_config;
+		h_eap_fast_config_t           eap_fast_config;
 
 		rpc_eap_default_cert_bundle_t eap_default_cert_bundle;
 
@@ -596,7 +589,7 @@ typedef struct Ctrl_cmd_t {
 		rpc_eap_domain_name_t         eap_domain_name;
 
 #if H_GOT_SET_EAP_METHODS_API
-		esp_eap_method_t              methods;
+		h_eap_method_t                methods;
 #endif
 #endif
 #if H_DPP_SUPPORT

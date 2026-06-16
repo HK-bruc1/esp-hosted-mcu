@@ -16,12 +16,6 @@
 static void stub_init_config_to_req(const h_wifi_init_config_t *src, void *req_wifi_init_config)
 { (void)src; (void)req_wifi_init_config; }
 
-static void stub_config_to_req(const h_wifi_config_t *src, void *req_wifi_config_u)
-{ (void)src; (void)req_wifi_config_u; }
-
-static void stub_config_from_resp(const void *resp_wifi_config_u, h_wifi_config_t *dst)
-{ (void)resp_wifi_config_u; (void)dst; }
-
 static void stub_scan_config_to_req(const h_wifi_scan_config_t *src, void *req_wifi_scan_config_cfg)
 { (void)src; (void)req_wifi_scan_config_cfg; }
 
@@ -66,8 +60,6 @@ static h_wifi_bandwidth_t stub_bw_to_host(uint8_t v)
 
 const h_wifi_contract_t g_h_wifi = {
     .init_config_to_req       = stub_init_config_to_req,
-    .config_to_req            = stub_config_to_req,
-    .config_from_resp         = stub_config_from_resp,
     .scan_config_to_req       = stub_scan_config_to_req,
     .country_to_req           = stub_country_to_req,
     .ap_record_from_resp      = stub_ap_record_from_resp,

@@ -890,7 +890,7 @@ esp_err_t esp_eap_client_remote_get_disable_time_check(bool *disable)
 esp_err_t esp_eap_client_remote_set_ttls_phase2_method(esp_eap_ttls_phase2_types type)
 {
 	check_transport_up();
-	return rpc_eap_client_set_ttls_phase2_method(type);
+	return rpc_eap_client_set_ttls_phase2_method((h_eap_ttls_phase2_types_t)type);
 }
 
 esp_err_t esp_eap_client_remote_set_suiteb_192bit_certification(bool enable)
@@ -907,8 +907,14 @@ esp_err_t esp_eap_client_remote_set_pac_file(const unsigned char *pac_file, int 
 
 esp_err_t esp_eap_client_remote_set_fast_params(esp_eap_fast_config config)
 {
+	h_eap_fast_config_t h_config = {
+		.fast_provisioning = config.fast_provisioning,
+		.fast_max_pac_list_len = config.fast_max_pac_list_len,
+		.fast_pac_format_binary = config.fast_pac_format_binary,
+	};
+
 	check_transport_up();
-	return rpc_eap_client_set_fast_params(config);
+	return rpc_eap_client_set_fast_params(h_config);
 }
 
 esp_err_t esp_eap_client_remote_use_default_cert_bundle(bool use_default_bundle)
@@ -933,7 +939,7 @@ esp_err_t esp_eap_client_remote_set_domain_name(const char *domain_name)
 esp_err_t esp_eap_client_remote_set_eap_methods(esp_eap_method_t methods)
 {
 	check_transport_up();
-	return rpc_eap_client_set_eap_methods(methods);
+	return rpc_eap_client_set_eap_methods((h_eap_method_t)methods);
 }
 #endif
 #endif

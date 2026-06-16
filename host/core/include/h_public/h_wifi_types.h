@@ -247,6 +247,16 @@ typedef enum {
     H_WIFI_VND_IE_ID_1,
 } h_wifi_vendor_ie_id_t;
 
+/* Vendor IE Data
+ * Replaces vendor_ie_data_t (esp_wifi_types.h). */
+typedef struct {
+    uint8_t element_id;
+    uint8_t length;
+    uint8_t vendor_oui[3];
+    uint8_t vendor_oui_type;
+    uint8_t payload[0];
+} h_wifi_vendor_ie_data_t;
+
 /* ── TWT Setup Config ──
  * Replaces wifi_itwt_setup_config_t (IDF > 5.3) and
  * wifi_twt_setup_config_t (IDF <= 5.3). Unified portable version. */

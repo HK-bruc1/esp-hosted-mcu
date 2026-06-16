@@ -173,8 +173,6 @@ typedef enum {
 
 /* ── Wi-Fi Type Conversion ── */
 #define h_wifi_init_config_to_req(s, d)   (g_h_wifi.init_config_to_req(s, d))
-#define h_wifi_config_to_req(s, d)        (g_h_wifi.config_to_req(s, d))
-#define h_wifi_config_from_resp(s, d)     (g_h_wifi.config_from_resp(s, d))
 #define h_wifi_scan_config_to_req(s, d)   (g_h_wifi.scan_config_to_req(s, d))
 #define h_wifi_country_to_req(s, d)       (g_h_wifi.country_to_req(s, d))
 

@@ -51,12 +51,12 @@ CORE_PORTABLE_SCOPE=(
 grepx() {
     grep -rn "$1" "${CORE_PORTABLE_SCOPE[@]}" --include="*.c" --include="*.h" 2>/dev/null \
         | grep -v ':.*\* Replaces\|:.*\* @brief\|:.*\* Original\|:.*\* Map' \
-        | grep -v ': *//\|: */\*\|:  \*' \
+        | grep -v ': *//\|: */\*\|: *\*\($\|[ /]\)' \
         | grep -v ':.*// REMOVED:\|:.*// CHECK:' || true
 }
 
 # ESP-IDF headers
-FORBIDDEN+=$(grepx '#include "esp_err\.h"\|#include "esp_wifi\.h"\|#include "esp_log\.h"\|#include "esp_timer\.h"\|#include "esp_heap_caps\.h"')
+FORBIDDEN+=$(grepx '#include "esp_err\.h"\|#include "esp_wifi\.h"\|#include "esp_wifi_types\.h"\|#include "esp_eap_client\.h"\|#include "esp_dpp\.h"\|#include "esp_log\.h"\|#include "esp_timer\.h"\|#include "esp_heap_caps\.h"')
 FORBIDDEN+=$(grepx '#include "esp_private/')
 # ESP-IDF types
 FORBIDDEN+=$(grepx '\besp_err_t\b\|\besp_event_base_t\b\|\besp_mac_type_t\b\|\bwifi_interface_t\b\|\bwifi_vendor_ie_type_t\b\|\bwifi_vendor_ie_id_t\b')
@@ -65,9 +65,11 @@ FORBIDDEN+=$(grepx '\besp_err_t\b\|\besp_event_base_t\b\|\besp_mac_type_t\b\|\bw
 # ESP-IDF log macros
 FORBIDDEN+=$(grepx 'ESP_LOG[IEWDV]\|ESP_EARLY_LOG')
 # ESP-IDF Wi-Fi struct types — fully portable-ized, native types must not appear in core
-FORBIDDEN+=$(grepx '\bwifi_init_config_t\b\|\bwifi_config_t\b\|\bwifi_ap_record_t\b\|\bwifi_scan_config_t\b\|\bwifi_sta_list_t\b\|\bwifi_country_t\b')
+FORBIDDEN+=$(grepx '\bwifi_init_config_t\b\|\bwifi_config_t\b\|\bwifi_sta_config_t\b\|\bwifi_ap_config_t\b\|\bwifi_ap_record_t\b\|\bwifi_scan_config_t\b\|\bwifi_sta_list_t\b\|\bwifi_country_t\b\|\bvendor_ie_data_t\b')
 # ESP-IDF Wi-Fi enum/scalar types — portable-ized in this round
 FORBIDDEN+=$(grepx '\bwifi_second_chan_t\b\|\bwifi_phy_mode_t\b\|\bwifi_scan_default_params_t\b\|\bwifi_band_t\b\|\bwifi_band_mode_t\b\|\bwifi_protocols_t\b\|\bwifi_bandwidths_t\b\|\bwifi_twt_config_t\b')
+# ESP-IDF Enterprise/DPP types
+FORBIDDEN+=$(grepx '\besp_eap_ttls_phase2_types\b\|\besp_eap_fast_config\b\|\besp_eap_method_t\b\|\besp_supp_dpp_event_t\b\|\besp_supp_dpp_event_cb_t\b\|\besp_supp_dpp_bootstrap_t\b')
 
 # ESP_PRIV_* constants — defined in common/transport/esp_hosted_transport.h,
 # these are project public wire-format protocol symbols, not ESP-IDF-specific.

@@ -27,6 +27,10 @@ extern void test_rpc_parse_rsp_sta_list_clamps_num_to_portable_capacity(void);
 extern void test_rpc_parse_evt_null(void);
 extern void test_rpc_parse_evt_unknown(void);
 extern void test_compose_rpc_req_simple(void);
+extern void test_compose_rpc_req_wifi_set_config_sta_uses_portable_config(void);
+extern void test_compose_rpc_req_wifi_set_config_ap_uses_portable_config(void);
+extern void test_rpc_parse_rsp_wifi_get_config_sta_populates_portable_config(void);
+extern void test_rpc_parse_rsp_wifi_get_config_ap_populates_portable_config(void);
 extern void test_serial_drv_open_close(void);
 extern void test_serial_drv_null_args(void);
 extern void test_rpc_platform_deinit_safe(void);
@@ -60,6 +64,7 @@ extern void test_mac_type_enum_values(void);
 extern void test_mac_type_enum_distinct(void);
 extern void test_wifi_vendor_ie_type_enum_values(void);
 extern void test_wifi_vendor_ie_id_enum_values(void);
+extern void test_wifi_vendor_ie_data_layout_matches_native_stub(void);
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -96,6 +101,10 @@ int main(void)
     RUN_TEST(test_rpc_parse_evt_null);
     RUN_TEST(test_rpc_parse_evt_unknown);
     RUN_TEST(test_compose_rpc_req_simple);
+    RUN_TEST(test_compose_rpc_req_wifi_set_config_sta_uses_portable_config);
+    RUN_TEST(test_compose_rpc_req_wifi_set_config_ap_uses_portable_config);
+    RUN_TEST(test_rpc_parse_rsp_wifi_get_config_sta_populates_portable_config);
+    RUN_TEST(test_rpc_parse_rsp_wifi_get_config_ap_populates_portable_config);
     RUN_TEST(test_serial_drv_open_close);
     RUN_TEST(test_serial_drv_null_args);
     RUN_TEST(test_rpc_platform_deinit_safe);
@@ -129,5 +138,6 @@ int main(void)
     RUN_TEST(test_mac_type_enum_distinct);
     RUN_TEST(test_wifi_vendor_ie_type_enum_values);
     RUN_TEST(test_wifi_vendor_ie_id_enum_values);
+    RUN_TEST(test_wifi_vendor_ie_data_layout_matches_native_stub);
     return UNITY_END();
 }
