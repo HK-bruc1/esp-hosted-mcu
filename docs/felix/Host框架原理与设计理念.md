@@ -6,7 +6,7 @@
 2. 当前代码如何通过 contract/wrapper 与 port selector 隔离平台。
 3. 第一阶段结束后，哪些结论可以成立，哪些结论仍不能过度声明。
 
-## 1. 当前结论
+## 1. 当前能力边界
 
 截至当前代码状态，ESP-IDF Host active source set 已完成 legacy port/vtable 解耦：
 
@@ -17,11 +17,11 @@
 - Host port 入口已由根 `CMakeLists.txt` 收口为 `ESP_HOSTED_HOST_PORT` + `host/port/<port>/port.cmake`。
 - 新平台移植入口已明确为实现 `h_port_contract.h` 中的 contract，而不是复刻旧 `hosted_osi_funcs_t`。
 
-允许的表述：
+当前可以确认的结论：
 
-> 当前 ESP-IDF Host active source set 已完成 legacy port/vtable 解耦；core 层保持平台隔离；port 接入模型已收口为三合约 + wrapper + port.cmake selector。该状态达到当前平台移植友好型架构要求。
+> 当前 ESP-IDF Host active source set 已完成 legacy port/vtable 解耦；core 层保持平台隔离；port 接入模型已收口为 **四合约**（`g_h_osal`、`g_h_event`、`g_h_transport`、`g_h_wifi`）+ wrapper + `port.cmake` selector。该状态达到当前平台移植友好型架构要求。
 
-不允许的表述：
+当前不能过度声明的结论：
 
 - 任意第二平台已经完成验证。
 - 所有 legacy 文件已经删除。
@@ -68,18 +68,21 @@ Core layer
 Wrapper layer
   host/port/include/h_wrapper.h
   - h_malloc, h_sem_take, h_transmit, H_LOGE, ...
+  - h_wifi_iface_to_native, h_wifi_mode_to_host, ...
         |
 Contract layer
   host/port/include/h_port_contract.h
   - g_h_osal
   - g_h_event
   - g_h_transport
+  - g_h_wifi
         |
 Selected port
   host/port/<port>/
   - h_osal.c
   - h_event.c
   - h_transport_*.c
+  - h_wifi.c / h_wifi_type_adapt.c
   - port_init.c
   - port.cmake
         |
@@ -131,13 +134,14 @@ Host 框架原先依赖 `hosted_osi_funcs_t` / `g_h.funcs` 这类大而全的 le
 - 旧 vtable 名称和语义绑定历史实现，新平台难以判断哪些必须实现。
 - active path 与 legacy helper 容易互相引用，导致“看似抽象，实际仍依赖旧 port”。
 
-第一阶段后的新结构把平台能力拆成三个主要 contract：
+第一阶段后的新结构把平台能力拆成四个主要 contract：
 
 | Contract | 全局实例 | 职责 |
 |---|---|---|
 | `h_osal_contract_t` | `g_h_osal` | memory、thread、mutex、queue、semaphore、timer、logging、部分 power-save optional extension |
 | `h_event_contract_t` | `g_h_event` | event register、unregister、post、Wi-Fi event post |
 | `h_transport_contract_t` | `g_h_transport` | transport lifecycle、transmit、bus-specific operation、GPIO、netif |
+| `h_wifi_contract_t` | `g_h_wifi` | portable `h_wifi_*` 类型与平台原生 Wi-Fi 类型/枚举的双向转换 |
 
 控制串口另有一个轻量 contract：
 
@@ -235,6 +239,8 @@ host/drivers/transport/<bus>/<bus>_drv.c
 - transport leaf driver 内部可以定义或调用 `esp_hosted_tx()`。
 - 如果未来要支持更多非 ESP-IDF transport driver，可再评估是否把 leaf driver internal API 进一步抽象。
 
+> 控制面和 BT HCI 复用同一 transport：BT 数据帧走 `IF_TYPE_BT` / `IF_NUM_BT`，与控制面 `IF_TYPE_CTRL_PORT` 共用 `transmit` 槽，但 BT 协议解析由 BT host stack 负责，core transport state machine 不感知 BT payload 语义。
+
 ## 9. Control Plane 边界
 
 控制面当前采用 adapter closure，而不是单独抽象成完整 `h_control_contract_t`：
@@ -282,7 +288,21 @@ host/drivers/transport/<bus>/<bus>_drv.c
 
 这些验证能证明当前平台 active path 的静态解耦和参考 port 的构建可用性。它们不能替代第二平台真实 bring-up。
 
-## 12. 当前阶段的最佳实践判断
+## 12. 从旧架构到新架构：关键对比
+
+如果你是从旧 `g_h.funcs` / `hosted_osi_funcs_t` 架构迁移过来的开发者，可以用下表快速理解差异：
+
+| 旧架构 | 新架构 | 说明 |
+|---|---|---|
+| `hosted_osi_funcs_t` 大 vtable | `h_osal_contract_t` + `h_event_contract_t` + `h_transport_contract_t` + `h_wifi_contract_t` | 能力拆分，职责更清晰 |
+| `g_h.funcs->_h_*` 直接调用 | `h_*` wrapper 宏（`h_malloc`、`h_transmit`、`h_wifi_mode_to_host` 等） | core 不直接依赖 vtable 字段 |
+| `HOSTED_FREE` / `HOSTED_CALLOC` 宏 | `h_free` / `h_calloc` wrapper | 移除宏链，语义更明确 |
+| `host/port/esp/freertos/` | `host/port/esp-idf/`（新 port） | ESP-IDF port 与 legacy FreeRTOS port 解耦 |
+| 根 `CMakeLists.txt` 硬编码 port 源文件 | `ESP_HOSTED_HOST_PORT` + `host/port/<port>/port.cmake` | 新平台只需新增目录并导出变量 |
+| Wi-Fi 类型直接混用 ESP-IDF 原生类型 | `h_wifi_*` portable 类型 + `g_h_wifi` 转换 contract | core 存储可移植，平台转换在 API/port 边缘完成 |
+| `esp_hosted_tx()` 被多处调用 | `esp_hosted_tx()` 仅限 transport leaf driver，consumer 用 `h_transmit()` | 边界更清晰，但尚未升级为 public contract |
+
+## 13. 当前阶段的最佳实践判断
 
 当前 Host 框架已达到当前平台“移植友好型最佳实践”的架构要求，原因是：
 
@@ -291,14 +311,14 @@ host/drivers/transport/<bus>/<bus>_drv.c
 - wrapper 统一了调用入口。
 - ESP-IDF port 不再与 legacy FreeRTOS port 双层并行编译。
 - `port.cmake` 建立了新 port 的构建入口。
-- porting guide 可直接指导新平台实现三合约。
+- porting guide 可直接指导新平台实现**四合约**。
 
 但仍需保留两个边界判断：
 
 1. active driver 源码中仍可能使用 ESP-IDF 日志或 FreeRTOS 头。这属于当前 ESP-IDF driver 实现层，不等价于 core 耦合。
 2. 第二平台尚未完成真实 PoC，因此不能宣称 contract 对任意平台已经充分。
 
-## 13. 后续演进方向
+## 14. 后续演进方向
 
 第一阶段结束后，后续工作建议按以下优先级推进：
 
@@ -306,8 +326,8 @@ host/drivers/transport/<bus>/<bus>_drv.c
 2. 根据 PoC 结果决定是否拆出更细的 control、GPIO、power-save 或 bus contract。
 3. 清理或归档未编译 legacy duplicate source，降低全仓审计噪音。
 4. 逐步减少 active driver 对 ESP-IDF 日志宏的直接使用，但不要把它与 core 解耦完成度混为一谈。
-5. 将文档长期维护为两份：本设计理念文档和 Host 框架移植指南。
+5. 将文档长期维护为两份：本设计理念文档和 [`Host框架移植指南.md`](Host框架移植指南.md)。
 
-## 14. 一句话总结
+## 15. 一句话总结
 
-Host 框架第一阶段重构已经把平台差异从旧 `g_h.funcs` 大 vtable 和 legacy port 双层结构中释放出来，收口为清晰的 contract/wrapper/port selector 模型。当前 ESP-IDF 平台 active path 已完成解耦；下一阶段的核心任务不是继续证明 ESP-IDF 自己，而是用第二平台验证这些 contract 是否足够通用。
+Host 框架第一阶段重构已经把平台差异从旧 `g_h.funcs` 大 vtable 和 legacy port 双层结构中释放出来，收口为清晰的 **四合约**（`g_h_osal`、`g_h_event`、`g_h_transport`、`g_h_wifi`）+ wrapper + port selector 模型。当前 ESP-IDF 平台 active path 已完成解耦；下一阶段的核心任务不是继续证明 ESP-IDF 自己，而是用第二平台验证这些 contract 是否足够通用。具体移植步骤见 [`Host框架移植指南.md`](Host框架移植指南.md)。
