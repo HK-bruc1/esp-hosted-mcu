@@ -1,0 +1,791 @@
+# ESP-Hosted-MCU Host 框架 JL（杰理）平台移植方案
+
+## 1. 目标与范围
+
+把 ESP-Hosted-MCU 的 Host 框架移植到当前 JL（杰理）AC701N SDK，使其可以作为 JL 主控 MCU 与 ESP32 系列协处理器通过 SPI/UART 通信，提供 Wi-Fi 能力。
+
+范围：
+
+- 新增 `host/port/jl/` 平台目录，实现四合约（`g_h_osal`、`g_h_event`、`g_h_transport`、`g_h_wifi`）。
+- 把 core / api / common 源文件接入现有 JL `Makefile` 构建流程。
+- 第一阶段先跑通 UART transport + 最小 control RPC；第二阶段扩展到 SPI 与完整 Wi-Fi 业务。
+- 不修改 wire protocol、不修改 public API 语义、不主动清理 legacy 文件。
+
+## 2. 对方案评估的回应
+
+评估指出的问题大部分属实，已在本文修正：
+
+| 评估点 | 是否属实 | 本文处理 |
+|---|---|---|
+| UART 的 `gpio_set_intr`/`gpio_clear_intr`/`gpio_read` 不是 required | **属实** | 已在 7.4 节标注为 optional |
+| `h_port_config.h` 缺少 UART 配置宏 | **属实** | 已在 6 节补充完整 UART/SPI/通用宏 |
+| 需要编译 `h_transport_defaults.c` | **属实，但不能直接复用** | 已加入 5.2 节源文件列表，并在 8 节说明需改成 JL 本地版本，去掉 `esp_err.h` / `esp_hosted_transport_config.h` 依赖 |
+| `h_transport_common.c` 也必须编译 | **部分属实** | 仅当开启 OpenThread（`H_OT_HOST_ENABLE`）时才需要；第一阶段关闭，不需要编译 |
+| `esp_hosted_transport_config.c` 也不能直接编译 | **属实** | 已从 5.2 节源文件列表移除，JL 不经过 `esp_hosted_set_default_config()`，由 transport task 层直接调用 `h_transport_init()` |
+| `uart_drv.c` 不能直接复用 | **属实** | 已明确不编译 `uart_drv.c`，新增 9 节说明 JL 需自行实现 transport task 层 |
+| include 路径顺序 | **属实** | 已调整 `host/port/jl` 排在 `host/port/include` 之前 |
+| `esp_hosted_cli.c` 是否必须 | **属实** | 已从源文件列表移除，第一阶段不编译 |
+| `common/log/esp_hosted_log.h` | **需澄清** | core/api 不使用该头；只有 legacy driver（`uart_drv.c`/`spi_drv.c`）使用。JL 不编译这些 driver，因此不需要该头 |
+| 缺少 `H_WIFI_AUTO_CONNECT_ON_STA_START` 等宏 | **属实** | 已在 6 节补充 |
+
+## 3. 可行性判断
+
+当前代码状态已经具备第二平台 PoC 条件：
+
+- core 层（`host/core/src/`）已完成与 ESP-IDF / FreeRTOS / legacy vtable 的隔离，只通过 `h_wrapper.h` 调用 port 能力。
+- 根 `CMakeLists.txt` 通过 `ESP_HOSTED_HOST_PORT` + `port.cmake` 选择 port，新平台有明确构建入口。
+- 四合约已经拆清，每个 contract 的 required / optional slot 在 `h_init.c` 的 `h_validate_contracts()` 中有 fail-fast 校验。
+- 已有 `host/port/linux/` mock port 作为非 ESP 平台的实现参考。
+
+需要保留的判断：
+
+- 这仍是对 contract 充分性的真实验证，不是"任意平台开箱即用"。
+- JL 的构建系统不是 ESP-IDF，需要手工接管源文件和 include 路径。
+- JL RTOS 原语、中断模型、GPIO/SPI/UART 驱动与 ESP-IDF 不同，需要 adapter 层。
+
+结论：**可以开始 JL 平台移植，作为第二阶段 PoC。**
+
+## 4. 移植策略
+
+### 4.1 不改造 ESP-IDF 构建路径
+
+`esp-hosted-mcu/CMakeLists.txt` 继续保留给 ESP-IDF 使用。JL 不使用它，而是把 core / api / common 的源文件直接加进 JL 的 `Makefile`。
+
+### 4.2 分层 bring-up
+
+推荐顺序：
+
+1. 建立 `host/port/jl/` 目录与最小 `h_port_config.h`。
+2. 让 core + api + common 在 JL 编译器下先编过（先不实现 transport，可用 mock）。
+3. 实现 `g_h_osal`（线程、互斥、队列、信号量、定时器、日志、malloc）。
+4. 实现 `g_h_event`（简单链表 registry）。
+5. 实现 `g_h_wifi`（枚举与结构体转换）。
+6. 实现 UART transport contract + GPIO reset/flow control。
+7. 实现 JL transport task 层（等效于 `uart_drv.c` 中的读写任务、header 解析、队列）。
+8. 打通 control serial read/write，跑通最小 RPC。
+9. 跑通 STA scan / connect。
+10. 可选：切换到 SPI transport；开启 BT、OTA、network split。
+
+### 4.3 先 UART 后 SPI
+
+UART 对 GPIO 和中断要求最低，最利于先验证 contract 和 RPC 链路。SPI 性能更好，但涉及 DMA、中断、handshake/data-ready 时序，放到第二阶段。
+
+## 5. 推荐目录结构
+
+```text
+esp-hosted-mcu/host/port/jl/
+├── port.cmake              # 兼容 root CMakeLists 的 port selector（JL 实际不用，但保留形状）
+├── port_init.c             # h_port_* lifecycle hooks
+├── h_port_config.h         # 平台配置、transport 选择、feature flags
+├── h_osal.c                # g_h_osal
+├── h_event.c               # g_h_event
+├── h_wifi.c                # g_h_wifi
+├── h_transport_uart.c      # UART transport adapter（contract vtable）
+├── h_transport_uart_bus.c  # JL UART HAL 操作（可选，如果较简单可合并）
+├── h_transport_spi.c       # SPI transport adapter（第二阶段）
+├── h_transport_spi_bus.c   # JL SPI HAL 操作（第二阶段）
+├── h_transport_gpio.c      # GPIO helper（reset、handshake、data-ready）
+├── h_transport_defaults.c  # JL 本地版本：去掉 esp_err.h/esp_hosted_transport_config.h 依赖
+├── h_transport_task.c      # JL transport task 层（替代 uart_drv.c/spi_drv.c）
+├── h_control_serial_adapter.c  # 控制串口 adapter
+├── mempool.h               # JL 兼容的 mempool.h shadow（替代 common/mempool/include/mempool.h）
+├── sdkconfig.h             # 最小 CONFIG_* stub
+├── esp_hosted_cli.h        # stub：CLI 第一阶段关闭
+└── README.md               # 本 port 的编译与接线说明
+```
+
+### 5.1 在 JL `Makefile` 中新增 include 路径
+
+**顺序很重要：平台目录必须排在 `host/port/include` 之前，否则 `h_port_config.h` 会被通用 fallback 覆盖。**
+
+```make
+# ESP-Hosted 公共头（按优先级排序）
+-Iesp-hosted-mcu/host/port/jl \
+-Iesp-hosted-mcu/host \
+-Iesp-hosted-mcu/host/api/include \
+-Iesp-hosted-mcu/host/core/include/h_public \
+-Iesp-hosted-mcu/host/core/include/h_internal \
+-Iesp-hosted-mcu/host/port/include \
+-Iesp-hosted-mcu/common \
+-Iesp-hosted-mcu/common/proto \
+-Iesp-hosted-mcu/common/transport \
+-Iesp-hosted-mcu/common/rpc \
+-Iesp-hosted-mcu/common/utils \
+-Iesp-hosted-mcu/common/protobuf-c \
+-Iesp-hosted-mcu/host/drivers/serial \
+-Iesp-hosted-mcu/host/drivers/transport \
+-Iesp-hosted-mcu/host/drivers/transport/spi \
+-Iesp-hosted-mcu/host/drivers/transport/uart \
+-Iesp-hosted-mcu/host/drivers/rpc/core \
+-Iesp-hosted-mcu/host/drivers/rpc/slaveif \
+-Iesp-hosted-mcu/host/drivers/rpc/wrap \
+-Iesp-hosted-mcu/host/drivers/virtual_serial_if \
+-Iesp-hosted-mcu/host/api/priv
+```
+
+说明：
+
+- `host/port/jl` 放在最前，用于覆盖 `h_port_config.h`、`mempool.h`、`sdkconfig.h`、`esp_hosted_cli.h`。
+- `common/log` 不需要加入 include 路径（core/api 不使用 `esp_hosted_log.h`）。
+- `common/mempool/include` 不需要加入，因为 `host/port/jl/mempool.h` 已经 shadow 了它。
+
+### 5.2 需要编译的源文件（第一阶段 UART 最小集）
+
+```make
+# --- core / api / common ---
+esp-hosted-mcu/host/api/src/esp_wifi_weak.c
+esp-hosted-mcu/host/api/src/esp_hosted_api.c
+esp-hosted-mcu/host/api/src/esp_hosted_ota_api.c
+esp-hosted-mcu/host/core/src/h_init.c
+esp-hosted-mcu/host/core/src/h_api.c
+esp-hosted-mcu/host/core/src/h_event.c
+esp-hosted-mcu/host/core/src/h_serial_if.c
+esp-hosted-mcu/host/core/src/h_transport_drv.c
+esp-hosted-mcu/host/core/src/h_transport_util.c
+esp-hosted-mcu/host/drivers/serial/serial_ll_if.c
+esp-hosted-mcu/host/core/src/h_rpc_core.c
+esp-hosted-mcu/host/core/src/h_rpc_req.c
+esp-hosted-mcu/host/core/src/h_rpc_rsp.c
+esp-hosted-mcu/host/core/src/h_rpc_evt.c
+esp-hosted-mcu/host/core/src/h_rpc_utils.c
+esp-hosted-mcu/host/core/src/h_rpc_wrap.c
+esp-hosted-mcu/host/drivers/rpc/slaveif/rpc_slave_if.c
+esp-hosted-mcu/host/drivers/virtual_serial_if/serial_if.c
+esp-hosted-mcu/common/protobuf-c/protobuf-c/protobuf-c.c
+esp-hosted-mcu/common/proto/esp_hosted_rpc.pb-c.c
+
+# --- JL port ---
+esp-hosted-mcu/host/port/jl/port_init.c
+esp-hosted-mcu/host/port/jl/h_osal.c
+esp-hosted-mcu/host/port/jl/h_event.c
+esp-hosted-mcu/host/port/jl/h_wifi.c
+esp-hosted-mcu/host/port/jl/h_transport_defaults.c    # JL 本地版本，见 8 节
+esp-hosted-mcu/host/port/jl/h_transport_uart.c
+esp-hosted-mcu/host/port/jl/h_transport_uart_bus.c    # 可选
+esp-hosted-mcu/host/port/jl/h_transport_gpio.c
+esp-hosted-mcu/host/port/jl/h_transport_task.c        # 替代 uart_drv.c
+esp-hosted-mcu/host/port/jl/h_control_serial_adapter.c
+```
+
+**明确不编译的 legacy/ESP-IDF 专用文件：**
+
+- `host/api/src/esp_hosted_transport_config.c` —— ESP-IDF 专用，使用 `esp_log.h`、`ESP_ERROR_CHECK()`、`esp_err_t`。JL 不经过 `esp_hosted_set_default_config()`，transport task 层直接初始化 bus，因此不需要该文件。
+- `host/drivers/transport/uart/uart_drv.c` —— ESP-IDF 专用，直接 include FreeRTOS 头。
+- `host/drivers/transport/spi/spi_drv.c` —— 同上。
+- `host/drivers/transport/sdio/sdio_drv.c` —— 同上。
+- `host/drivers/power_save/power_save_drv.c` —— 第一阶段关闭 power-save。
+- `common/utils/esp_hosted_cli.c` —— ESP-IDF console 依赖，第一阶段关闭。
+- `common/mempool/mempool.c` / `mempool_ll.c` —— 第一阶段关闭 mempool。
+
+## 6. 配置入口 `h_port_config.h`
+
+```c
+#ifndef H_PORT_CONFIG_JL_H
+#define H_PORT_CONFIG_JL_H
+
+#define H_PORT_NAME         "jl-ac701n"
+#define H_PORT_VERSION      "0.1.0"
+#define H_PORT_RTOS         "JL-RTOS"
+#define H_PORT_RTOS_VER     "1.0"
+#define H_PORT_CHIP         "AC701N"
+#define H_PORT_BUILD_DATE   __DATE__
+
+/* 第一阶段用 UART，第二阶段再切 SPI */
+#define H_TRANSPORT_IN_USE  H_TRANSPORT_UART
+
+/* Thread defaults —— 根据 JL RTOS 实际栈大小调整 */
+#define H_DEFAULT_TASK_STACK      4096
+#define H_DEFAULT_TASK_PRIO       5
+#define H_DEFAULT_RPC_TASK_STACK  H_DEFAULT_TASK_STACK
+
+/* Transport buffer */
+#define H_MAX_TRANSPORT_BUFFER_SIZE  1600
+
+/* 第一阶段全部关闭 */
+#define H_FEATURE_BLUETOOTH 0
+#define H_FEATURE_OTA       0
+#define H_FEATURE_NETSPLIT  0
+#define H_FEATURE_DPP       0
+#define H_FEATURE_ENTERPRISE 0
+
+/* 非 ESP-IDF 平台，这些特性不存在 */
+#define H_PRESENT_IN_ESP_IDF_5_4_0  0
+#define H_PRESENT_IN_ESP_IDF_5_5_0  0
+#define H_DECODE_WIFI_RESERVED_FIELD 0
+#define H_WIFI_NEW_RESERVED_FIELD_NAMES 0
+
+/* netif：JL 没有 ESP-IDF 的 esp_netif，第一阶段关闭 */
+#define H_HOST_USES_STATIC_NETIF 0
+
+/* Wi-Fi/NVS 可移植映射 */
+#define H_WIFI_AUTO_CONNECT_ON_STA_START  0
+#define H_WIFI_NVS_ENABLED                0
+#define H_FW_VERSION_MISMATCH_WARNING_SUPPRESS  0
+#define H_PEER_DATA_TRANSFER              0
+#define H_MAX_CUSTOM_MSG_HANDLERS         0
+
+/* GPIO 通用值 */
+#define H_GPIO_LOW   0
+#define H_GPIO_HIGH  1
+#define H_GPIO_MODE_INPUT    1
+#define H_GPIO_MODE_OUTPUT   2
+#define H_GPIO_PULL_UP       1
+#define H_GPIO_PULL_DOWN     0
+#define H_GPIO_INTR_DISABLE  0
+#define H_GPIO_INTR_POSEDGE  1
+#define H_GPIO_INTR_NEGEDGE  2
+#define H_GPIO_INTR_ANYEDGE  3
+#define H_GPIO_INTR_LOW_LEVEL  4
+#define H_GPIO_INTR_HIGH_LEVEL 5
+
+/* Reset pin（所有 transport 共用） */
+#define H_GPIO_PORT_RESET  NULL
+#define H_GPIO_PIN_RESET   25   /* 根据实际硬件修改 */
+#define H_RESET_ACTIVE_HIGH  1
+#if H_RESET_ACTIVE_HIGH
+  #define H_RESET_VAL_ACTIVE   H_GPIO_HIGH
+  #define H_RESET_VAL_INACTIVE H_GPIO_LOW
+#else
+  #define H_RESET_VAL_ACTIVE   H_GPIO_LOW
+  #define H_RESET_VAL_INACTIVE H_GPIO_HIGH
+#endif
+
+/* Transport 开关标志 */
+#define H_SPI_HD_HOST_INTERFACE    0
+#define H_UART_HOST_TRANSPORT      1
+
+/* UART 配置 */
+#define H_UART_PORT                   0
+#define H_UART_BAUD_RATE              115200
+#define H_UART_NUM_DATA_BITS          8
+#define H_UART_PARITY                 0
+#define H_UART_START_BITS             1
+#define H_UART_STOP_BITS              1
+#define H_UART_FLOWCTRL               0   /* 第一阶段必须关闭硬件流控 */
+#define H_UART_CLK_SRC                0
+#define H_UART_CHECKSUM               1
+#define H_UART_PIN_TX                 0   /* 根据实际硬件修改 */
+#define H_UART_PORT_TX                NULL
+#define H_UART_PIN_RX                 1   /* 根据实际硬件修改 */
+#define H_UART_PORT_RX                NULL
+#define H_UART_TX_QUEUE_SIZE          10
+#define H_UART_RX_QUEUE_SIZE          10
+#define H_TRANSPORT_QUEUE_SIZE        H_UART_TX_QUEUE_SIZE
+
+/* 由 transport task 层使用的 buffer 宏 */
+#define MAX_TRANSPORT_BUFFER_SIZE  H_MAX_TRANSPORT_BUFFER_SIZE
+#define MAX_UART_BUFFER_SIZE       H_MAX_TRANSPORT_BUFFER_SIZE
+#define H_ESP_PAYLOAD_HEADER_OFFSET  12
+#define MAX_PAYLOAD_SIZE           (MAX_TRANSPORT_BUFFER_SIZE - H_ESP_PAYLOAD_HEADER_OFFSET)
+
+/* mempool 第一阶段关闭 */
+#define H_USE_MEMPOOL  0
+#define CONFIG_ESP_HOSTED_USE_MEMPOOL  0
+
+/* zerocopy 标志 */
+#define H_BUFF_NO_ZEROCOPY  0
+#define H_BUFF_ZEROCOPY     1
+
+/* Phase 2 feature flags（显式关闭） */
+#define H_TEST_RAW_TP              0
+#define H_RAW_TP_REPORT_INTERVAL   0
+#define H_RAW_TP_PKT_LEN           0
+#define H_TEST_RAW_TP_DIR          0
+#define ESP_PKT_STATS              0
+#define ESP_PKT_STATS_REPORT_INTERVAL 0
+#define H_MEM_MONITOR              0
+#define H_MEM_STATS                0
+#define CONFIG_H_LOWER_MEMCOPY     0
+
+/* Power-save 第一阶段关闭 */
+#define H_HOST_PS_ALLOWED                 0
+#define H_HOST_WAKEUP_GPIO                (-1)
+#define H_HOST_WAKEUP_GPIO_PORT           NULL
+#define H_HOST_WAKEUP_GPIO_LEVEL          1
+#define H_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE 0
+#define H_HOST_RESTART_NO_COMMUNICATION_WITH_SLAVE_TIMEOUT_MS  -1
+#define H_TRANSPORT_RESTART_ON_FAILURE    0
+#define H_SLAVE_RESET_ON_EVERY_HOST_BOOTUP 1
+#define H_SLAVE_RESET_ONLY_IF_NECESSARY   0
+#define H_HOST_SDIO_RESET_DELAY_MS        1500
+
+/* OpenThread 第一阶段关闭 */
+#define H_OT_HOST_ENABLE          0
+#define H_OT_TRANSPORT_UART_DEDICATED 0
+#define H_OT_TRANSPORT_HOSTED     0
+
+/* BT 第一阶段关闭 */
+#define H_BT_HOST_ESP_NIMBLE      0
+#define H_BT_HOST_ESP_BLUEDROID   0
+#define H_BT_USE_VHCI             0
+#define H_BT_BLUEDROID_USE_VHCI   0
+#define H_BT_ENABLE_LL_INIT       0
+
+/* Wi-Fi feature flags */
+#define H_WIFI_HE_SUPPORT         0
+#define H_WIFI_HE_GREATER_THAN_ESP_IDF_5_3 0
+#define H_WIFI_DUALBAND_SUPPORT   0
+#define H_WIFI_ENTERPRISE_SUPPORT 0
+#define H_GOT_TWT_ENABLE_KEEP_ALIVE 0
+#define H_GOT_AP_CONFIG_PARAM_TRANSITION_DISABLE 0
+#define H_PRESENT_IN_ESP_IDF_6_0_0 0
+#define H_GOT_SET_EAP_METHODS_API 0
+#define H_GOT_EAP_SET_DOMAIN_NAME 0
+#define H_GOT_EAP_OKC_SUPPORT     0
+#define H_DPP_SUPPORT             0
+
+/* 日志 tag 助手 */
+#ifndef DEFINE_LOG_TAG
+#define DEFINE_LOG_TAG(sTr) static const char TAG[] = #sTr
+#endif
+
+/* weak reference */
+#ifndef H_WEAK_REF
+#define H_WEAK_REF __attribute__((weak))
+#endif
+
+#endif
+```
+
+## 7. 四合约实现要点
+
+### 7.1 OSAL Contract (`g_h_osal`)
+
+需要映射到 JL RTOS 的以下能力：
+
+| Slot | JL 实现建议 |
+|---|---|
+| `malloc/calloc/realloc/free` | 直接封装 `malloc`/`free`；如 JL 有专用 heap API，则封装之 |
+| `malloc_align/free_align` | 使用 JL 提供的对齐内存分配，或自行按 alignment 对齐后返回 |
+| `memcpy/memset` | 标准库或 JL 优化版本 |
+| `thread_create/thread_delete` | 封装 JL `os_task_create` / `os_task_del` |
+| `mutex_*` | 封装 JL `os_mutex_*` |
+| `queue_*` | 封装 JL 消息队列 API；若无，可用 mutex + 环形缓冲区实现 |
+| `sem_*` / `sem_give_from_isr` | 封装 JL 信号量；ISR 安全版本必须区分 task/ISR context |
+| `enter_critical/exit_critical` | 关中断/开中断或 JL critical section API |
+| `timer_create/start/stop/delete` | 封装 JL 软件定时器；注意 `timer_stop` 是 terminal op，要释放 wrapper |
+| `get_time_ms` | 使用 JL tick 或 hardware timer |
+| `msleep/usleep/blocking_delay` | 封装 `os_time_dly` 或忙等 |
+| `log_write` | 输出到 JL `printf` 或日志组件，按 level 加前缀 |
+
+关键注意：
+
+- `sem_give_from_isr` 如果 JL 不区分 ISR context，可暂时映射为 `sem_give`。
+- `timer_stop()` 必须释放 timer wrapper handle（见 contract 注释）。
+- `enter_critical()` / `exit_critical()` 需要支持嵌套或配对，否则 core 的临界区会出问题。
+
+### 7.2 Event Contract (`g_h_event`)
+
+最小实现：
+
+```c
+typedef struct {
+    h_event_base_t base;
+    int32_t event_id;
+    h_event_handler_t handler;
+    void *ctx;
+} h_event_handler_entry_t;
+
+static h_event_handler_entry_t s_handlers[H_MAX_EVENT_HANDLERS];
+```
+
+实现 `register_handler` / `unregister_handler` / `post` / `wifi_post`。`post` 可以直接在当前上下文调用 handler，也可以投递到队列由单独任务分发。第一阶段建议直接同步调用以简化调试。
+
+### 7.3 Wi-Fi Type Contract (`g_h_wifi`)
+
+参考 `host/port/esp-idf/h_wifi_type_adapt.c` 和 `host/port/linux/src/h_wifi.c`。
+
+JL 平台没有 ESP-IDF 的 `wifi_init_config_t` 等原生类型，因此转换函数实际上是把 `h_wifi_*`  portable 类型与 `ctrl_cmd_t` union 中的 request/response 存储做字段级映射。
+
+如果 `h_wifi_*` 的内存布局与 slave 期望的 protobuf 解码后的结构一致，早期可用 `memcpy`；否则需要字段级映射。重点验证：
+
+- `h_wifi_mode_t` / `h_wifi_interface_t` / `h_wifi_ps_type_t` / `h_wifi_bandwidth_t` 的 enum 数值与 slave 期望一致。
+- `h_wifi_init_config_t`、`h_wifi_scan_config_t`、`h_wifi_country_t`、`h_wifi_ap_record_t` 的大小和字段顺序与 slave 一致。
+
+建议加 `_Static_assert` 检查大小（参考 ESP-IDF port 底部 static assert）。
+
+### 7.4 Transport Contract (`g_h_transport`) — UART 第一阶段
+
+`h_validate_contracts()` 对 UART 只要求：
+
+- `init` / `deinit` / `bus_ready` / `transmit`
+- `uart_read` / `uart_write` / `uart_flush`
+- `gpio_config` / `gpio_write`
+
+`gpio_set_intr` / `gpio_clear_intr` / `gpio_read` / `gpio_pull` / `gpio_hold` / `netif_create` / `netif_destroy` 对 UART 第一阶段都是 optional。
+
+最小 vtable：
+
+```c
+const h_transport_contract_t g_h_transport = {
+    .init         = jl_uart_init,
+    .deinit       = jl_uart_deinit,
+    .bus_ready    = jl_uart_bus_ready,
+    .transmit     = jl_uart_transmit,
+
+    .uart_read    = jl_uart_read,
+    .uart_write   = jl_uart_write,
+    .uart_flush   = jl_uart_flush,
+
+    .gpio_config  = jl_gpio_config,
+    .gpio_write   = jl_gpio_write,
+    /* 其余 slot 第一阶段可为 NULL */
+};
+```
+
+UART adapter 设计：
+
+- `init()` 中配置 UART 波特率、数据位、停止位、关闭硬件流控。
+- `transmit()` 是 core transport 层调用的高层接口，它把 frame 交给 JL transport task 层的 TX queue。
+- `uart_read()` / `uart_write()` 是底层 HAL 接口，由 `h_transport_uart_bus.c` 实现。
+- `bus_ready()` 第一阶段可简单返回 1，或检测 reset 完成后的某个 GPIO 状态。
+
+### 7.5 Transport Contract — SPI 第二阶段
+
+`h_validate_contracts()` 对 SPI 要求：
+
+- `init` / `deinit` / `bus_ready` / `transmit`
+- `spi_transfer`
+- `gpio_config` / `gpio_set_intr`
+
+必须实现：
+
+```c
+.init         = jl_spi_init,
+.deinit       = jl_spi_deinit,
+.bus_ready    = jl_spi_bus_ready,
+.transmit     = jl_spi_transmit,
+.spi_transfer = jl_spi_transfer,
+.gpio_config  = jl_gpio_config,
+.gpio_set_intr = jl_gpio_set_intr,
+.gpio_read    = jl_gpio_read,
+.gpio_write   = jl_gpio_write,
+```
+
+SPI 难点：
+
+- 需要与 slave 的 handshake / data-ready 协议对齐（参考 `host/drivers/transport/spi/spi_drv.c` 的握手逻辑）。
+- DMA buffer 需要按 slave 要求对齐。
+- `spi_transfer` 接口签名是 `void *transfer_ctx`，需要封装 JL 的 SPI full-duplex API。
+
+建议第二阶段先让 SPI 的 raw throughput 跑通，再跑 Wi-Fi RPC。
+
+## 8. `h_transport_defaults.c` 的处理
+
+`host/port/esp-idf/h_transport_defaults.c` 不能直接复用，因为它：
+
+1. `#include "esp_hosted_transport_config.h"`，该头文件又 `#include "esp_err.h"`（ESP-IDF 头）。
+2. 使用 `CONFIG_ESP_HOSTED_UART_HOST_INTERFACE` 等宏，而 JL 的 `h_port_config.h` 使用 `H_UART_HOST_TRANSPORT` 等命名。
+3. 依赖 `struct esp_hosted_uart_config` 等类型，这些类型定义在 `esp_hosted_transport_config.h` 中。
+
+解决方案：**在 `host/port/jl/h_transport_defaults.c` 放一份修改后的本地版本**，完全去掉 ESP-IDF 头依赖，直接用 `h_port_config.h` 中的宏填充 JL 本地定义的 config struct。
+
+最小示例（UART 第一阶段）：
+
+```c
+/* host/port/jl/h_transport_defaults.c */
+#include "h_port_config.h"
+#include <stdint.h>
+
+typedef struct {
+    void *port;
+    int pin;
+} gpio_pin_t;
+
+struct jl_uart_config {
+    uint8_t port;
+    gpio_pin_t pin_tx;
+    gpio_pin_t pin_rx;
+    gpio_pin_t pin_reset;
+    uint8_t num_data_bits;
+    uint8_t parity;
+    uint8_t stop_bits;
+    uint8_t flow_ctrl;
+    uint8_t clk_src;
+    bool checksum_enable;
+    uint32_t baud_rate;
+    uint16_t tx_queue_size;
+    uint16_t rx_queue_size;
+};
+
+struct jl_uart_config esp_hosted_get_default_uart_config(void)
+{
+    return (struct jl_uart_config) {
+        .port = H_UART_PORT,
+        .pin_tx = { .port = H_UART_PORT_TX, .pin = H_UART_PIN_TX },
+        .pin_rx = { .port = H_UART_PORT_RX, .pin = H_UART_PIN_RX },
+        .pin_reset = { .port = H_GPIO_PORT_RESET, .pin = H_GPIO_PIN_RESET },
+        .num_data_bits = H_UART_NUM_DATA_BITS,
+        .parity = H_UART_PARITY,
+        .stop_bits = H_UART_STOP_BITS,
+        .flow_ctrl = H_UART_FLOWCTRL,
+        .clk_src = H_UART_CLK_SRC,
+        .checksum_enable = H_UART_CHECKSUM,
+        .baud_rate = H_UART_BAUD_RATE,
+        .tx_queue_size = H_UART_TX_QUEUE_SIZE,
+        .rx_queue_size = H_UART_RX_QUEUE_SIZE,
+    };
+}
+```
+
+注意：`esp_hosted_transport_config.c` 中调用了 `INIT_DEFAULT_HOST_UART_CONFIG()`，但我们已经明确不编译该文件，因此 JL 本地版本只需满足自身 transport task 层的初始化需求即可。为兼容起见，仍保留同名函数 `esp_hosted_get_default_uart_config()`，但其他 bus 的默认 config 函数可以省略。
+
+## 9. JL Transport Task 层设计
+
+**这是第一阶段最容易被低估的工作量。**
+
+ESP-IDF 的 `host/drivers/transport/uart/uart_drv.c` 做了以下事情：
+
+1. 创建 TX/RX queue 和信号量。
+2. spawn `h_uart_read_task`、`h_uart_write_task`、`h_uart_process_rx_task` 三个任务。
+3. 在 `h_uart_read_task` 中循环读取 UART，解析 `esp_payload_header`。
+4. 在 `h_uart_write_task` 中从 TX queue 取包，组装 header + checksum，调用 `uart_write`。
+5. 在 `h_uart_process_rx_task` 中按 `if_type` 分发到 serial / STA / AP / HCI / priv。
+6. 提供 `esp_hosted_tx()` 供上层入队。
+
+JL 不编译 `uart_drv.c`，因此需要自行实现等效层，建议放在 `host/port/jl/h_transport_task.c`。
+
+关键函数/符号：
+
+| 符号 | 职责 | 调用方 |
+|---|---|---|
+| `bus_init_internal(void)` | 创建队列、任务、调用 `h_transport_init()` | `h_port_transport_init()` |
+| `bus_deinit_internal(void *bus_handle)` | 删除任务、队列、调用 `h_transport_deinit()` | `h_port_transport_deinit()` |
+| `esp_hosted_tx(...)` | 上层入队接口 | `h_transport_drv.c` / serial / BT |
+| `ensure_slave_bus_ready(void *bus_handle)` | reset slave | transport init flow |
+| `is_transport_tx_ready()` / `is_transport_rx_ready()` | transport 状态 | core transport |
+
+最小实现要点：
+
+```c
+/* h_transport_task.c */
+#include "h_wrapper.h"
+#include "esp_hosted_transport.h"
+#include "transport_drv.h"
+#include "esp_hosted_transport_init.h"
+
+static h_queue_t to_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_to_slave_queue;
+static h_queue_t from_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_from_slave_queue;
+static void *uart_handle = NULL;
+
+void *bus_init_internal(void)
+{
+    /* 创建 sem/queue */
+    /* 调用 h_transport_init(&uart_handle) */
+    /* spawn read/write/process 任务 */
+    return uart_handle;
+}
+
+int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
+                  uint8_t *payload_buf, uint16_t payload_len, uint8_t buff_zcopy,
+                  uint8_t *buffer_to_free, void (*free_buf_func)(void *ptr), uint8_t flags)
+{
+    interface_buffer_handle_t buf_handle = {0};
+    /* 组装 buf_handle，按 if_type 选择 prio queue，入队 */
+    return H_OK;
+}
+```
+
+注意：
+
+- `h_transport_drv.c` 会调用 `is_transport_tx_ready()` 和 `is_transport_rx_ready()`，JL 需要提供这些函数（或 weak stub）。
+- `h_transport_drv.c` 也会调用 `transport_drv_add_channel()` 注册 channel，这些 channel 的 `rx` callback 需要在 process_rx_task 中调用。
+- 第一阶段可以只处理 `ESP_SERIAL_IF` 和 `ESP_STA_IF` / `ESP_AP_IF`，BT 和 raw TP 跳过。
+
+## 10. 控制串口适配
+
+实现 `host/port/jl/h_control_serial_adapter.c`，提供：
+
+```c
+h_control_serial_handle_t *h_control_serial_drv_open(const char *transport);
+int h_control_serial_drv_close(h_control_serial_handle_t **handle);
+int h_control_serial_drv_write(h_control_serial_handle_t *handle,
+                               uint8_t *buf, int in_count, int *out_count);
+uint8_t *h_control_serial_drv_read(h_control_serial_handle_t *handle,
+                                   uint32_t *out_nbyte);
+int h_control_serial_platform_init(void);
+int h_control_serial_platform_deinit(void);
+```
+
+JL 实现建议：
+
+- 复用 `host/drivers/rpc/serial/serial_ll_if.c` 的 TLV 帧格式。
+- `read` 从 UART RX buffer 解析 TLV，返回完整 protobuf payload；注意返回值生命周期归调用方。
+- 第一阶段可以先用 UART 作为控制面，不单独开第二路 UART。
+
+## 11. Lifecycle Hooks (`port_init.c`)
+
+```c
+h_err_t h_port_osal_init(void)     { return H_OK; }
+void    h_port_osal_deinit(void)   { }
+h_err_t h_port_event_init(void)    { return H_OK; }
+void    h_port_event_deinit(void)  { }
+
+extern void *bus_init_internal(void);
+extern void  bus_deinit_internal(void *bus_handle);
+static void *s_bus_handle = NULL;
+
+h_err_t h_port_transport_init(void)
+{
+    s_bus_handle = bus_init_internal();
+    return s_bus_handle ? H_OK : H_FAIL;
+}
+
+void h_port_transport_deinit(void)
+{
+    bus_deinit_internal(s_bus_handle);
+    s_bus_handle = NULL;
+}
+
+extern int rpc_core_init(void);
+extern int rpc_core_start(void);
+extern int rpc_core_stop(void);
+extern int rpc_core_deinit(void);
+
+h_err_t h_port_rpc_init(void)
+{
+    if (rpc_core_init() != 0) return H_FAIL;
+    if (rpc_core_start() != 0) return H_FAIL;
+    return H_OK;
+}
+
+void h_port_rpc_deinit(void)
+{
+    rpc_core_stop();
+    rpc_core_deinit();
+}
+```
+
+## 12. 构建集成步骤
+
+1. 在 JL `Makefile` 中新增 include 路径（见 5.1 节），确保 `host/port/jl` 在最前。
+2. 新增需要编译的 `.c` 文件列表（见 5.2 节）。
+3. 定义全局宏替代 ESP-IDF Kconfig：
+   - `CONFIG_ESP_HOSTED_ENABLED=1`
+   - `CONFIG_ESP_HOSTED_UART_HOST_INTERFACE=1`（第一阶段）
+   - 关闭其他 transport：`CONFIG_ESP_HOSTED_SPI_HOST_INTERFACE=0` 等
+   - 关闭 mempool：`CONFIG_ESP_HOSTED_USE_MEMPOOL=0`（第一阶段）
+   - 关闭 BT/OTA/network split/power-save 相关 `CONFIG_*`
+4. 提供 `host/port/jl/mempool.h` shadow 头，避免引入 `sdkconfig.h`、`sys/queue.h`、FreeRTOS 头：
+
+   ```c
+   #ifndef __MEMPOOL_H__
+   #define __MEMPOOL_H__
+   #include <stdint.h>
+   typedef struct hosted_mempool_t hosted_mempool_t;
+   typedef enum { HOSTED_MEM_CAP_NONE, HOSTED_MEM_CAP_DMA, HOSTED_MEM_CAP_MAX } hosted_mem_cap_t;
+   #endif
+   ```
+
+5. 提供最小 `host/port/jl/sdkconfig.h` stub（仅定义 core 会用到的 `CONFIG_*`）：
+
+   ```c
+   #ifndef __SDKCONFIG_H__
+   #define __SDKCONFIG_H__
+   #define CONFIG_ESP_HOSTED_ENABLED 1
+   #define CONFIG_ESP_HOSTED_UART_HOST_INTERFACE 1
+   #define CONFIG_ESP_HOSTED_USE_MEMPOOL 0
+   /* 按需补充 */
+   #endif
+   ```
+
+6. 提供 `host/port/jl/esp_hosted_cli.h` stub（CLI 关闭）：
+
+   ```c
+   #ifndef _ESP_HOSTED_CLI_H_
+   #define _ESP_HOSTED_CLI_H_
+   /* H_ESP_HOSTED_CLI_ENABLED 未定义，不暴露任何 API */
+   #endif
+   ```
+
+7. 处理 `protobuf-c.c` 和 `esp_hosted_rpc.pb-c.c` 的编译；确认 pi32 工具链支持 C99 和变长数组。
+8. 处理 `esp_wifi_weak.c` 中的 weak symbol；JL 链接器需要支持 `__attribute__((weak))`。
+9. 处理 `WHOLE_ARCHIVE` 需求：JL 链接方式不同，需要确保 weak override 被保留。如果链接器会丢弃未引用段，需要显式保留或调整链接脚本。
+
+## 13. 风险与缓解
+
+| 风险 | 影响 | 缓解 |
+|---|---|---|
+| JL RTOS 缺少 queue / semaphore 原语 | OSAL 实现复杂 | 用 mutex + 条件变量/环形缓冲区自行实现；先保证行为正确 |
+| `mempool.h` / `sdkconfig.h` 引入 ESP-IDF 头 | 编译失败 | 用 `host/port/jl` shadow 头覆盖 |
+| pi32 工具链对 weak symbol 支持有限 | `esp_wifi_weak.c` 链路失败 | 检查链接器行为，必要时用强符号或修改链接脚本保留 |
+| protobuf-c 在 pi32 上编译不过 | RPC 无法使用 | 先用 `-fsyntax-only` 检查；必要时打补丁或换静态库 |
+| UART 波特率/流控与 slave 不匹配 | 数据乱码 | 从 115200 开始，关闭流控，用示波器确认 |
+| SPI handshake 时序不对 | 初始化失败 | 参考 `host/drivers/transport/spi/spi_drv.c` 和 ESP-IDF port 的 GPIO 顺序 |
+| `h_wifi_*` 与 slave 类型布局不一致 | Wi-Fi init/scan 异常 | 用 `_Static_assert` 检查大小，字段级映射逐个对齐 |
+| transport task 层实现遗漏 | 数据面不通 | 对照 `uart_drv.c` 逐个实现 read/write/process 任务和 `esp_hosted_tx` |
+| 内存不足 | malloc 失败 | 调大 task stack，关闭 mempool，监控 heap 使用 |
+
+## 14. 验收标准
+
+### 14.1 第一阶段最小完成标准
+
+- `host/port/jl/` 目录存在，`h_port_config.h` 定义 UART transport。
+- `g_h_osal`、`g_h_event`、`g_h_transport`、`g_h_wifi` 的 required slot 全部非 NULL。
+- `h_validate_contracts()` 通过。
+- `h_hosted_init()` 成功完成。
+- 至少一个最小 RPC request/response 成功（如获取 MAC、获取固件版本）。
+- 没有新引入 `g_h.funcs`、`HOSTED_*`、`esp_hosted_os_abstraction.h` 等 active 依赖。
+
+### 14.2 第二阶段推荐完成标准
+
+- STA scan / connect + DHCP 成功。
+- 数据面完成一次 TCP/UDP smoke test。
+- reset/reinit 能重复运行。
+- SPI transport 替代 UART transport 可工作。
+- 可选 feature 全部有明确 compile gate。
+
+## 15. 里程碑建议
+
+| 阶段 | 目标 | 预计时间 |
+|---|---|---|
+| M1 | 建立 `host/port/jl/`，core + api + common 在 JL 下编译通过 | 3-5 天 |
+| M2 | OSAL / event / wifi contract 实现，`h_hosted_init()` 跑到 contract validation | 3-5 天 |
+| M3 | UART transport adapter + GPIO reset/ready 打通 | 3-5 天 |
+| M4 | 实现 JL 本地 `h_transport_defaults.c` 和 transport task 层 | 5-7 天 |
+| M4a | 实现 JL 本地 `h_transport_defaults.c` | 0.5-1 天 |
+| M4b | 实现 transport task 层（替代 uart_drv.c），slave 能正常 reset | 4-6 天 |
+| M5 | control serial read/write 可用，最小 RPC 成功 | 3-5 天 |
+| M6 | STA scan / connect 成功，TCP/UDP smoke test | 5-7 天 |
+| M7 | SPI transport 接入，raw TP 稳定 | 5-7 天 |
+| M8 | BT/OTA/network split 可选 feature 逐个开启 | 视需求 |
+
+## 16. 参考文件
+
+| 目的 | 文件 |
+|---|---|
+| Contract 定义 | `host/port/include/h_port_contract.h` |
+| Wrapper 调用方式 | `host/port/include/h_wrapper.h` |
+| 通用配置入口 | `host/port/include/h_config.h` |
+| 控制串口 contract | `host/port/include/h_control_serial_contract.h` |
+| 初始化与校验 | `host/core/src/h_init.c` |
+| ESP-IDF OSAL 参考 | `host/port/esp-idf/h_osal.c` |
+| ESP-IDF event 参考 | `host/port/esp-idf/h_event.c` |
+| ESP-IDF Wi-Fi 类型适配参考 | `host/port/esp-idf/h_wifi_type_adapt.c` |
+| ESP-IDF 默认 transport config（参考，不直接复用） | `host/port/esp-idf/h_transport_defaults.c` |
+| JL 本地默认 transport config | `host/port/jl/h_transport_defaults.c` |
+| ESP-IDF port source list | `host/port/esp-idf/port.cmake` |
+| Linux mock port参考 | `host/port/linux/` |
+| ESP-IDF UART 驱动（参考逻辑，不复用） | `host/drivers/transport/uart/uart_drv.c` |
+| ESP-IDF SPI 驱动（参考逻辑，不复用） | `host/drivers/transport/spi/spi_drv.c` |
+| Control serial adapter | `host/drivers/rpc/serial/serial_ll_if.c` |
+| Transport header 定义 | `common/transport/esp_hosted_transport.h` |
+| Transport init 定义 | `common/transport/esp_hosted_transport_init.h` |
+
+## 17. 对本次评估的回应
+
+本次评估指出的 `h_transport_defaults.c` 依赖链问题**完全属实**。
+
+此外，`host/api/src/esp_hosted_transport_config.c` 也确实不能直接编译：
+
+- 它 `#include "esp_log.h"`，使用 `ESP_ERROR_CHECK()`、`ESP_LOGE()`、`esp_err_t`。
+- 它依赖 `struct esp_hosted_transport_config`（定义在 `esp_hosted_transport_config.h` 中）。
+- 由于 JL 不经过 `esp_hosted_set_default_config()`，transport task 层直接调用 `h_transport_init()` 初始化 bus，因此已将其从 5.2 节源文件列表中移除。
+
+已采纳推荐方案 A：在 `host/port/jl/h_transport_defaults.c` 中放一份修改后的本地版本，完全去掉 ESP-IDF 头依赖，直接用 `h_port_config.h` 中的宏填充本地定义的 config struct（详见第 8 节）。该文件不再被 `esp_hosted_transport_config.c` 调用，而是作为 JL 自身 transport task 层的默认配置来源。
+
+## 18. 一句话总结
+
+JL 平台移植是 ESP-Hosted-MCU Host 框架第二阶段 PoC 的合理目标：core 已经平台无关，只需新增 `host/port/jl/` 实现四合约，并把 core / api / common 源文件接入 JL `Makefile`。**最大工作量和风险不在 contract 本身，而在 transport task 层（替代 `uart_drv.c`）、`h_transport_defaults.c` / `esp_hosted_transport_config.c` 的去 ESP-IDF 化，以及 ESP-IDF 头文件（`mempool.h`/`sdkconfig.h`）的 shadow/剥离。** 第一阶段先用 UART 跑通最小 RPC，再逐步扩展到 SPI 与完整 Wi-Fi 业务。

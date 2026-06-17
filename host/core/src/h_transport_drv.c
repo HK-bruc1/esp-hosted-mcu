@@ -156,6 +156,7 @@ h_err_t teardown_transport(void)
 
 	if (bus_handle) {
 		h_transport_deinit(bus_handle);
+		bus_handle = NULL;
 	}
 	H_LOGI(TAG, "TRANSPORT_INACTIVE");
 	transport_state = TRANSPORT_INACTIVE;
@@ -165,10 +166,15 @@ h_err_t teardown_transport(void)
 h_err_t setup_transport(void(*esp_hosted_up_cb)(void))
 {
 	h_err_t err;
+	/* Always store/update the upper-layer callback. */
+	transport_esp_hosted_up_cb = esp_hosted_up_cb;
+	if (transport_state != TRANSPORT_INACTIVE) {
+		H_LOGI(TAG, "Transport already initialized, reusing");
+		return H_OK;
+	}
 	h_hosted_init_hook();
 	err = transport_drv_init();
 	if (err != H_OK) return err;
-	transport_esp_hosted_up_cb = esp_hosted_up_cb;
 	return H_OK;
 }
 

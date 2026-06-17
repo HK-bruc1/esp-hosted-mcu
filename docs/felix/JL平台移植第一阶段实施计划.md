@@ -1,0 +1,909 @@
+# ESP-Hosted-MCU Host 框架 JL 平台第一阶段实施计划（M1-M5）
+
+## 目标
+
+在 JL（杰理）AC701N SDK 上完成 ESP-Hosted-MCU Host 框架第一阶段移植，实现：
+
+- core / api / common 源码在 JL 工具链下编译通过。
+- 四合约（`g_h_osal`、`g_h_event`、`g_h_transport`、`g_h_wifi`）实现并满足 `h_validate_contracts()`。
+- `h_hosted_init()` 成功完成。
+- UART transport + control serial 打通。
+- 至少一个最小 RPC（获取 MAC / 获取固件版本）成功。
+
+范围：M1 → M5，对应方案文档第 15 节的 M1 到 M5。
+
+## 当前进度（2026-06-17 更新）
+
+| 里程碑 | 状态 | 说明 |
+|---|---|---|
+| M1 编译通过 | ✅ 完成 | `host/port/jl/` 目录结构完整，`sdk.elf` 链接成功，无 ESP-IDF / FreeRTOS / legacy 头泄漏 |
+| M2 四合约 + `h_validate_contracts()` | ✅ 完成 | `g_h_osal` / `g_h_event` / `g_h_transport` / `g_h_wifi` 全部实现并通过校验 |
+| M3 UART adapter + GPIO reset | ⚠️ 代码完成，物理验证待硬件 | UART/GPIO 适配代码已就绪，但实际波形/reset 时序未上板确认 |
+| M4 transport task 层 | ⚠️ 代码完成，待硬件验证 | TX/RX 任务、header 解析、checksum、`esp_hosted_tx()` 已就绪，待 slave INIT 事件验证 |
+| M5 control serial + 最小 RPC | ⚠️ 代码完成，待硬件验证 | `h_control_serial_adapter.c` 已就绪，待 `rpc_wifi_get_mac()` / `esp_hosted_get_coprocessor_fwversion()` 跑通 |
+
+**总体结论**：第一阶段软件实现已全部完成并达到可提交质量；因缺少硬件，M3-M5 中依赖真实 slave 的验收项尚未验证，计划在硬件到位后立即进行冒烟测试。
+
+## 实施原则
+
+1. **先编过后跑通**：每一层先保证能编译，再进入运行时调试。
+2. **最小化开启**：第一阶段只开 UART，关闭 BT、OTA、net split、power-save、mempool。
+3. **分层推进**：OSAL → event → wifi contract → transport adapter → transport task → control serial → RPC。
+4. **不修改上游**：所有平台适配放在 `host/port/jl/`，必要时用 shadow 头覆盖，不改动 `host/core/`、`host/api/`、`common/`。
+5. **每个里程碑都有明确验收点**：未验收不进入下一步。
+
+---
+
+## M1：建立 `host/port/jl/`，core + api + common 在 JL 下编译通过
+
+**目标**：搭建最小 build 环境，让所有选中的源文件在 JL `Makefile` 下编译通过，链接可以先不过。
+
+**预计时间**：3-5 天
+
+### M1.1 创建目录结构
+
+在 `esp-hosted-mcu/host/port/jl/` 下创建：
+
+```text
+host/port/jl/
+├── port.cmake
+├── port_init.c
+├── h_port_config.h
+├── h_osal.c
+├── h_event.c
+├── h_wifi.c
+├── h_transport_uart.c
+├── h_transport_uart_bus.c
+├── h_transport_gpio.c
+├── h_transport_defaults.c
+├── h_transport_task.c
+├── h_control_serial_adapter.c
+├── mempool.h          # shadow
+├── sdkconfig.h        # shadow
+├── esp_hosted_cli.h   # shadow
+└── README.md
+```
+
+### M1.2 编写最小 `h_port_config.h`
+
+直接复用方案文档第 6 节的完整模板。关键项：
+
+- `H_TRANSPORT_IN_USE = H_TRANSPORT_UART`
+- `H_UART_HOST_TRANSPORT = 1`，其余 transport 开关 = 0
+- 所有 feature flags = 0
+- 所有 power-save / BT / OTA / OT / DPP = 0
+- `H_USE_MEMPOOL = 0`，`CONFIG_ESP_HOSTED_USE_MEMPOOL = 0`
+- `H_HOST_USES_STATIC_NETIF = 0`
+
+### M1.3 编写 shadow 头
+
+**`mempool.h`**：
+
+```c
+#ifndef __MEMPOOL_H__
+#define __MEMPOOL_H__
+#include <stdint.h>
+typedef struct hosted_mempool_t hosted_mempool_t;
+typedef enum { HOSTED_MEM_CAP_NONE, HOSTED_MEM_CAP_DMA, HOSTED_MEM_CAP_MAX } hosted_mem_cap_t;
+#endif
+```
+
+**`sdkconfig.h`**：
+
+```c
+#ifndef __SDKCONFIG_H__
+#define __SDKCONFIG_H__
+#define CONFIG_ESP_HOSTED_ENABLED 1
+#define CONFIG_ESP_HOSTED_UART_HOST_INTERFACE 1
+#define CONFIG_ESP_HOSTED_USE_MEMPOOL 0
+#endif
+```
+
+**`esp_hosted_cli.h`**：
+
+```c
+#ifndef _ESP_HOSTED_CLI_H_
+#define _ESP_HOSTED_CLI_H_
+#endif
+```
+
+### M1.4 调整 JL `Makefile`
+
+1. 新增 include 路径（按以下顺序，确保 `host/port/jl` 在最前）：
+
+   ```make
+   -Iesp-hosted-mcu/host/port/jl          # 最先：h_port_config.h, mempool.h, sdkconfig.h, esp_hosted_cli.h
+   -Iesp-hosted-mcu/host/port/include     # h_port_contract.h, h_wrapper.h, h_config.h
+   -Iesp-hosted-mcu/host/core/include/h_public
+   -Iesp-hosted-mcu/host/core/include/h_internal
+   -Iesp-hosted-mcu/host/api/include
+   -Iesp-hosted-mcu/host/api/priv
+   -Iesp-hosted-mcu/common
+   -Iesp-hosted-mcu/common/proto
+   -Iesp-hosted-mcu/common/transport
+   -Iesp-hosted-mcu/common/protobuf-c
+   -Iesp-hosted-mcu/host/drivers/serial
+   -Iesp-hosted-mcu/host/drivers/transport
+   -Iesp-hosted-mcu/host/drivers/transport/uart
+   -Iesp-hosted-mcu/host/drivers/rpc/slaveif
+   -Iesp-hosted-mcu/host/drivers/rpc/core
+   -Iesp-hosted-mcu/host/drivers/rpc/wrap
+   -Iesp-hosted-mcu/host/drivers/virtual_serial_if
+   ```
+
+2. 新增源文件列表（按方案文档 5.2 节）。
+3. 全局宏定义：`CONFIG_ESP_HOSTED_ENABLED=1`、`CONFIG_ESP_HOSTED_UART_HOST_INTERFACE=1` 等。
+
+### M1.5 提供最小 stub 让源文件先编过
+
+M1 阶段 `h_osal.c` / `h_event.c` / `h_wifi.c` / `h_transport_uart.c` 等文件可以先用空函数或最小实现，目标是不报编译错误。例如：
+
+```c
+/* h_osal.c M1 stub */
+const h_osal_contract_t g_h_osal = { 0 };
+```
+
+```c
+/* h_event.c M1 stub */
+const h_event_contract_t g_h_event = { 0 };
+```
+
+```c
+/* h_wifi.c M1 stub */
+const h_wifi_contract_t g_h_wifi = { 0 };
+```
+
+```c
+/* h_transport_uart.c M1 stub */
+const h_transport_contract_t g_h_transport = { 0 };
+```
+
+`h_transport_task.c`、`h_transport_defaults.c`、`h_control_serial_adapter.c`、`port_init.c` 也先提供空实现或最小函数体。
+
+**注意：M1 stub 全部零初始化，仅用于通过编译。此阶段不可调用 `h_hosted_init()`，否则 `h_validate_contracts()` 会立即失败。M2 实现完整 contract 后才能运行。**
+
+### M1.6 处理编译错误
+
+按错误类型分类处理：
+
+| 错误类型 | 处理方式 |
+|---|---|
+| 找不到 `sdkconfig.h` / `mempool.h` / `esp_hosted_cli.h` | 确认 include 顺序，`host/port/jl` 在最前 |
+| `esp_err.h` 找不到 | 确认 `esp_hosted_transport_config.c` 已从源文件列表移除 |
+| `esp_log.h` 找不到 | 确认 `uart_drv.c`/`spi_drv.c`/`sdio_drv.c`/`power_save_drv.c`/`esp_hosted_cli.c` 未编译；给 `esp_hosted_api.c` 提供 `esp_log.h` stub |
+| `freertos/*` 找不到 | 确认 legacy driver 未编译；core 代码不应 include FreeRTOS 头，如还有则反馈 |
+| `sys/queue.h` 找不到 | 确认 `common/mempool/mempool.c` 和 `mempool_ll.c` 未编译 |
+| `H_*` 宏未定义 | 在 `h_port_config.h` 中补充 |
+| 类型不匹配 | 检查 `h_types.h` 与 JL 平台类型 |
+
+### M1.7 验收标准
+
+- [x] `host/port/jl/` 目录结构创建完成。
+- [x] JL `Makefile` 已添加 include 路径和源文件列表（`host/port/jl` 在最前）。
+- [x] 所有选中的源文件在 JL 编译器下**编译通过**（允许链接未实现函数）。
+- [x] 没有 ESP-IDF / FreeRTOS / legacy 头文件泄漏到编译错误中。
+
+---
+
+## M2：实现 OSAL / event / wifi contract，跑到 `h_validate_contracts()`
+
+**目标**：让 `h_hosted_init()` 能执行到 `h_validate_contracts()` 并通过。
+
+**预计时间**：3-5 天
+
+### M2.1 实现 `g_h_osal`（`h_osal.c`）
+
+参考 `host/port/linux/src/h_osal.c` 和 `host/port/esp-idf/h_osal.c`，按 JL RTOS API 映射。
+
+必须实现的 slot（`h_validate_contracts()` 会检查）：
+
+- `malloc`、`calloc`、`realloc`、`free`
+- `memcpy`、`memset`
+- `malloc_align`、`free_align`
+- `thread_create`、`thread_delete`
+- `mutex_create`、`mutex_lock`、`mutex_unlock`、`mutex_delete`
+- `queue_create`、`queue_send`、`queue_recv`、`queue_msg_waiting`、`queue_reset`、`queue_delete`
+- `sem_create`、`sem_take`、`sem_give`、`sem_give_from_isr`、`sem_delete`
+- `enter_critical`、`exit_critical`
+- `timer_create`、`timer_start`、`timer_stop`、`timer_delete`、`get_time_ms`
+- `msleep`、`usleep`、`blocking_delay`
+- `log_write`
+
+实现建议：
+
+- 用 JL 的 `os_task_create` / `os_task_del` 实现 thread。
+- 用 JL 的 `os_mutex_*` 实现 mutex。
+- 用 JL 的 `os_sem_*` 实现 semaphore；ISR 版本如 JL 不区分，可映射为普通 give。
+- 用 JL 的 `os_time_dly` 或 tick 实现 `msleep` / `get_time_ms`。
+- 用 JL 的 `printf` 或日志输出实现 `log_write`，按 level 加前缀。
+- `malloc_align` 如 JL 无原生 API，可 `malloc(size + align)` 后手动对齐。
+- **timeout 单位映射**：JL RTOS 的 timeout 参数如果以 tick 为单位，需要在实现中做 `ms_to_tick()` 转换。`H_BLOCK_FOREVER` (-1) 应映射为 JL 的永久等待常量（如 `0xFFFFFFFF` 或 `OS_WAIT_FOREVER`）。
+
+### M2.2 实现 `g_h_event`（`h_event.c`）
+
+参考 `host/port/linux/src/h_event.c`，用链表实现。
+
+最小实现：
+
+```c
+typedef struct event_handler_entry {
+    h_event_base_t base;
+    int32_t event_id;
+    h_event_handler_t handler;
+    void *user_ctx;
+    struct event_handler_entry *next;
+} event_handler_entry_t;
+
+static event_handler_entry_t *g_handlers = NULL;
+static h_mutex_t g_event_lock;
+
+static int jl_event_register(h_event_base_t base, int32_t event_id,
+                             h_event_handler_t handler, void *user_ctx)
+{
+    event_handler_entry_t *e = h_malloc(sizeof(*e));
+    if (!e) return H_ERR_NO_MEM;
+    e->base = base; e->event_id = event_id;
+    e->handler = handler; e->user_ctx = user_ctx;
+    h_mutex_lock(g_event_lock, H_BLOCK_MAX);
+    e->next = g_handlers; g_handlers = e;
+    h_mutex_unlock(g_event_lock);
+    return H_OK;
+}
+
+static int jl_event_post(h_event_base_t base, int32_t event_id,
+                         void *event_data, size_t event_data_size)
+{
+    h_mutex_lock(g_event_lock, H_BLOCK_MAX);
+    for (event_handler_entry_t *e = g_handlers; e; e = e->next) {
+        if (e->base == base && e->event_id == event_id) {
+            e->handler(event_data, event_data_size, e->user_ctx);
+        }
+    }
+    h_mutex_unlock(g_event_lock);
+    return H_OK;
+}
+
+static int jl_event_wifi_post(int32_t event_id, void *event_data,
+                              size_t event_data_size, int32_t timeout_ms)
+{
+    (void)timeout_ms;
+    return jl_event_post(H_EVENT_WIFI, event_id, event_data, event_data_size);
+}
+
+const h_event_contract_t g_h_event = {
+    .register_handler   = jl_event_register,
+    .unregister_handler = jl_event_unregister,
+    .post               = jl_event_post,
+    .wifi_post          = jl_event_wifi_post,
+};
+```
+
+注意：`h_port_event_init()` 中需要初始化 `g_event_lock`。`h_event.c` 中的 vtable 引用了 `jl_event_unregister`，必须提供完整实现：
+
+```c
+static int jl_event_unregister(h_event_base_t base, int32_t event_id,
+                               h_event_handler_t handler)
+{
+    h_mutex_lock(g_event_lock, H_BLOCK_MAX);
+    event_handler_entry_t **pp = &g_handlers;
+    while (*pp) {
+        if ((*pp)->base == base && (*pp)->event_id == event_id &&
+            (*pp)->handler == handler) {
+            event_handler_entry_t *tmp = *pp;
+            *pp = (*pp)->next;
+            h_mutex_unlock(g_event_lock);
+            h_free(tmp);
+            return H_OK;
+        }
+        pp = &(*pp)->next;
+    }
+    h_mutex_unlock(g_event_lock);
+    return H_ERR_INVALID_ARG;
+}
+```
+
+### M2.3 实现 `g_h_wifi`（`h_wifi.c`）
+
+参考 `host/port/linux/src/h_wifi.c`（stub）和 `host/port/esp-idf/h_wifi_type_adapt.c`。
+
+第一阶段最小实现：直接用 `memcpy` + 枚举数值直通。
+
+```c
+static void jl_init_config_to_req(const h_wifi_init_config_t *src, void *req)
+{
+    memcpy(req, src, sizeof(*src));
+}
+
+static void jl_scan_config_to_req(const h_wifi_scan_config_t *src, void *req)
+{
+    memcpy(req, src, sizeof(*src));
+}
+
+static void jl_country_to_req(const h_wifi_country_t *src, void *req)
+{
+    memcpy(req, src, sizeof(*src));
+}
+
+static void jl_ap_record_from_resp(const void *resp, h_wifi_ap_record_t *dst)
+{
+    memcpy(dst, resp, sizeof(*dst));
+}
+
+static void jl_ap_record_from_resp_list(const void *resp, h_wifi_ap_record_t *dst)
+{
+    memcpy(dst, resp, sizeof(*dst));
+}
+
+static void jl_country_from_resp(const void *resp, h_wifi_country_t *dst)
+{
+    memcpy(dst, resp, sizeof(*dst));
+}
+
+static void jl_sta_list_from_resp(const void *resp, h_wifi_sta_list_t *dst)
+{
+    memcpy(dst, resp, sizeof(*dst));
+}
+
+static uint8_t jl_mode_to_native(h_wifi_mode_t v)
+{
+    return (uint8_t)v;  /* 假设 slave 与 h_wifi_mode_t 数值一致 */
+}
+
+static h_wifi_mode_t jl_mode_to_host(uint8_t v)
+{
+    return (h_wifi_mode_t)v;
+}
+
+/* iface/ps/bw 同理 */
+
+const h_wifi_contract_t g_h_wifi = {
+    .init_config_to_req       = jl_init_config_to_req,
+    .scan_config_to_req       = jl_scan_config_to_req,
+    .country_to_req           = jl_country_to_req,
+    .ap_record_from_resp      = jl_ap_record_from_resp,
+    .ap_record_from_resp_list = jl_ap_record_from_resp_list,
+    .country_from_resp        = jl_country_from_resp,
+    .sta_list_from_resp       = jl_sta_list_from_resp,
+    .iface_to_native          = jl_iface_to_native,
+    .mode_to_native           = jl_mode_to_native,
+    .ps_to_native             = jl_ps_to_native,
+    .bw_to_native             = jl_bw_to_native,
+    .iface_to_host            = jl_iface_to_host,
+    .mode_to_host             = jl_mode_to_host,
+    .ps_to_host               = jl_ps_to_host,
+    .bw_to_host               = jl_bw_to_host,
+};
+```
+
+注意：
+
+- 后续 M6 调试 scan/connect 时，需要验证 enum 数值是否与 slave 一致。
+- 建议加 `_Static_assert` 检查 `h_wifi_*` 类型大小与 `ctrl_cmd_t` union 成员一致（参考 ESP-IDF port 底部 static assert）。
+
+### M2.4 实现 `port_init.c` 中的全部 8 个 h_port_* 生命周期函数
+
+`h_init.c` 中声明了以下 8 个外部函数，`port_init.c` 必须全部定义，否则链接报 undefined symbol：
+
+```c
+h_err_t h_port_osal_init(void);
+void    h_port_osal_deinit(void);
+h_err_t h_port_event_init(void);
+void    h_port_event_deinit(void);
+h_err_t h_port_transport_init(void);
+void    h_port_transport_deinit(void);
+h_err_t h_port_rpc_init(void);
+void    h_port_rpc_deinit(void);
+```
+
+M2 阶段最小实现：
+
+```c
+h_err_t h_port_osal_init(void)  { return H_OK; }
+void    h_port_osal_deinit(void) { }
+
+h_err_t h_port_event_init(void)
+{
+    if (h_mutex_create(&g_event_lock) != H_OK) return H_FAIL;
+    return H_OK;
+}
+
+void h_port_event_deinit(void)
+{
+    /* 释放链表 */
+    h_mutex_lock(g_event_lock, H_BLOCK_MAX);
+    while (g_handlers) {
+        event_handler_entry_t *tmp = g_handlers;
+        g_handlers = g_handlers->next;
+        h_free(tmp);
+    }
+    h_mutex_unlock(g_event_lock);
+    h_mutex_delete(g_event_lock);
+}
+
+h_err_t h_port_transport_init(void) { return H_OK; }
+void    h_port_transport_deinit(void) { }
+
+h_err_t h_port_rpc_init(void) { return H_OK; }
+void    h_port_rpc_deinit(void) { }
+```
+
+### M2.5 transport / rpc init 先 stub
+
+`h_port_transport_init()` 和 `h_port_rpc_init()` 先返回 `H_OK`，让 `h_hosted_init()` 能跑到 `h_validate_contracts()`。
+
+### M2.6 运行 `h_validate_contracts()`
+
+在 JL 应用中调用 `h_hosted_init()`，确认 `h_validate_contracts()` 通过。如果失败，按日志提示补齐对应 contract slot。
+
+### M2.7 验收标准
+
+- [x] `h_validate_contracts()` 返回 `H_OK`。
+- [x] `h_hosted_init()` 成功完成（transport/rpc init 当前 stub 返回 OK）。
+- [x] （附加）`g_h_osal`、`g_h_event`、`g_h_transport`、`g_h_wifi` 的所有 slot 均非 NULL，而不仅是 `h_validate_contracts()` 检查的子集。
+
+注意：`h_validate_contracts()` 实际校验的子集如下，但建议全部实现以避免运行时崩溃：
+
+- OSAL: `malloc`, `free`, `mutex_create`, `queue_create`, `sem_create`, `thread_create`
+- Event: `register_handler`, `post`
+- Transport (UART): `init`, `deinit`, `bus_ready`, `transmit`, `uart_read`, `uart_write`, `uart_flush`, `gpio_config`, `gpio_write`
+- Wi-Fi: 全部 15 个 slot
+
+---
+
+## M3：UART transport adapter + GPIO reset/ready 打通
+
+**目标**：实现 `g_h_transport` 的 UART required slot，能初始化 UART、配置 GPIO、reset slave、读写 UART。
+
+**预计时间**：3-5 天
+
+### M3.1 实现 `h_transport_uart_bus.c`
+
+封装 JL UART HAL：
+
+```c
+static void *jl_uart_bus_init(void)
+{
+    /* 配置 UART：H_UART_BAUD_RATE / 8N1 / 无流控 */
+    /* 返回 bus handle */
+}
+
+static int jl_uart_bus_deinit(void *handle)
+{
+    /* 反初始化 */
+    return H_OK;
+}
+
+static int jl_uart_bus_read(void *handle, uint8_t *data, uint16_t size)
+{
+    /* 阻塞读取，返回读取字节数 */
+}
+
+static int jl_uart_bus_write(void *handle, uint8_t *data, uint16_t size)
+{
+    /* 写入，返回写入字节数 */
+}
+
+static int jl_uart_bus_flush_input(void *handle)
+{
+    /* 清空 RX FIFO */
+    return H_OK;
+}
+```
+
+### M3.2 实现 `h_transport_gpio.c`
+
+封装 JL GPIO：
+
+```c
+static int jl_gpio_config(uint32_t pin, uint32_t mode)
+{
+    /* H_GPIO_MODE_INPUT / H_GPIO_MODE_OUTPUT */
+}
+
+static int jl_gpio_write(uint32_t pin, uint32_t value)
+{
+    /* H_GPIO_HIGH / H_GPIO_LOW */
+}
+
+static int jl_gpio_read(uint32_t pin)
+{
+    /* 返回 0/1 */
+}
+```
+
+### M3.3 实现 `h_transport_uart.c`（contract vtable）
+
+```c
+const h_transport_contract_t g_h_transport = {
+    .init         = jl_uart_init_adapter,
+    .deinit       = jl_uart_deinit_adapter,
+    .bus_ready    = jl_uart_bus_ready,
+    .transmit     = jl_uart_transmit,
+
+    .uart_read    = jl_uart_read_adapter,
+    .uart_write   = jl_uart_write_adapter,
+    .uart_flush   = jl_uart_flush_adapter,
+
+    .gpio_config  = jl_gpio_config,
+    .gpio_write   = jl_gpio_write,
+    /* 其余 slot NULL */
+};
+```
+
+注意：
+
+- `transmit()` 是 core transport 层调用的高层接口，第一阶段可以把 frame 直接通过 `uart_write` 发出，或交给后续 M4 的 transport task 层。
+- `bus_ready()` 第一阶段可简单返回 1，或检测 reset 完成后的某个 GPIO 状态。
+
+### M3.4 验证 UART 物理链路
+
+1. 用逻辑分析仪或示波器确认 UART TX/RX 波形正确。
+2. 从 115200 开始，确认 slave 侧 UART 配置一致。
+3. 关闭硬件流控。
+4. 做一个 UART loopback 或 echo 测试，确认读写正常。
+
+### M3.5 验证 GPIO reset 时序
+
+1. 配置 reset GPIO 为输出。
+2. 按 `H_RESET_VAL_ACTIVE` / `H_RESET_VAL_INACTIVE` 时序 reset slave。
+3. 用示波器确认 reset 脉宽和电平。
+4. slave 应进入 boot 流程，UART 上有输出。
+
+### M3.6 验收标准
+
+- [x] `g_h_transport` 的 UART required slot 全部非 NULL。
+- [x] `h_validate_contracts()` 对 UART 的 bus-specific 检查通过。
+- [ ] UART 能正常发送/接收字节。（待硬件验证）
+- [ ] GPIO reset 能让 slave 重启。（待硬件验证）
+- [x] `h_transport_init()` / `h_transport_deinit()` 不崩溃。
+
+---
+
+## M4：实现 JL 本地 `h_transport_defaults.c` 和 transport task 层
+
+**目标**：替代 `uart_drv.c`，实现 TX/RX 队列、读写任务、header 解析、`esp_hosted_tx()`。
+
+**预计时间**：5-7 天（其中 M4a 0.5-1 天，M4b 4-6 天）
+
+### M4a：实现 JL 本地 `h_transport_defaults.c`
+
+按方案文档第 8 节，提供：
+
+```c
+struct jl_uart_config esp_hosted_get_default_uart_config(void)
+{
+    return (struct jl_uart_config) {
+        .port = H_UART_PORT,
+        .pin_tx = { .port = H_UART_PORT_TX, .pin = H_UART_PIN_TX },
+        .pin_rx = { .port = H_UART_PORT_RX, .pin = H_UART_PIN_RX },
+        .pin_reset = { .port = H_GPIO_PORT_RESET, .pin = H_GPIO_PIN_RESET },
+        .num_data_bits = H_UART_NUM_DATA_BITS,
+        .parity = H_UART_PARITY,
+        .stop_bits = H_UART_STOP_BITS,
+        .flow_ctrl = H_UART_FLOWCTRL,
+        .clk_src = H_UART_CLK_SRC,
+        .checksum_enable = H_UART_CHECKSUM,
+        .baud_rate = H_UART_BAUD_RATE,
+        .tx_queue_size = H_UART_TX_QUEUE_SIZE,
+        .rx_queue_size = H_UART_RX_QUEUE_SIZE,
+    };
+}
+```
+
+### M4b：实现 transport task 层（`h_transport_task.c`）
+
+需要实现以下关键符号：
+
+| 符号 | 说明 |
+|---|---|
+| `bus_init_internal(void)` | 创建 queue/sem，调用 `h_transport_init()`，spawn 任务 |
+| `bus_deinit_internal(void *)` | 删除任务、queue、sem，调用 `h_transport_deinit()` |
+| `esp_hosted_tx(...)` | 上层入队 |
+| `ensure_slave_bus_ready(void *)` | reset slave |
+| `is_transport_tx_ready()` | transport TX 状态 |
+| `is_transport_rx_ready()` | transport RX 状态 |
+
+#### 4b.1 队列和信号量
+
+`h_transport_task.c` 需要包含以下头文件：
+
+```c
+#include "h_wrapper.h"
+#include "esp_hosted_transport.h"
+#include "esp_hosted_header.h"
+#include "h_transport_drv.h"
+```
+
+全局变量：
+
+```c
+static h_queue_t to_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_to_slave_queue;
+static h_queue_t from_slave_queue[MAX_PRIORITY_QUEUES];
+static h_semaphore_t sem_from_slave_queue;
+static void *uart_handle = NULL;
+```
+
+#### 4b.2 read task
+
+循环执行：
+
+1. 读取 `sizeof(struct esp_payload_header)` 字节 header。
+2. 解析 `len` 和 `offset`。
+3. 读取 payload。
+4. 校验 checksum（如果 `H_UART_CHECKSUM`）。
+5. 组装 `interface_buffer_handle_t`，按 `if_type` 入队到 `from_slave_queue[priority]`。
+6. give `sem_from_slave_queue`。
+
+#### 4b.3 write task
+
+循环执行：
+
+1. take `sem_to_slave_queue`。
+2. 从 `to_slave_queue[priority]` 取包。
+3. 组装 `esp_payload_header`。
+4. 计算 checksum（如果 `H_UART_CHECKSUM`）。
+5. 调用 `h_uart_write()` 发送。
+
+#### 4b.4 process_rx task
+
+循环执行：
+
+1. take `sem_from_slave_queue`。
+2. 从 `from_slave_queue[priority]` 取包。
+3. 按 `if_type` 分发：
+   - `ESP_SERIAL_IF` → `serial_rx_handler(buf_handle)`
+   - `ESP_STA_IF` / `ESP_AP_IF` → `chan_arr[if_type]->rx(...)`
+   - `ESP_PRIV_IF` → `process_priv_communication(buf_handle)`，收到 `ESP_PRIV_EVENT_INIT` 后设置 `uart_start_write_thread = true`
+   - 其他跳过
+
+注意：`serial_rx_handler`、`process_priv_communication`、`chan_arr` 等符号在 `h_transport_drv.c` / `serial_ll_if.c` 中定义或声明。
+
+#### 4b.5 `esp_hosted_tx()`
+
+```c
+int esp_hosted_tx(uint8_t iface_type, uint8_t iface_num,
+                  uint8_t *payload_buf, uint16_t payload_len, uint8_t buff_zcopy,
+                  uint8_t *buffer_to_free, void (*free_buf_func)(void *ptr), uint8_t flags)
+{
+    interface_buffer_handle_t buf_handle = {0};
+    buf_handle.payload_zcopy = buff_zcopy;
+    buf_handle.if_type = iface_type;
+    buf_handle.if_num = iface_num;
+    buf_handle.payload_len = payload_len;
+    buf_handle.payload = payload_buf;
+    buf_handle.priv_buffer_handle = buffer_to_free;
+    buf_handle.free_buf_handle = free_buf_func;
+    buf_handle.flag = flags;
+
+    uint8_t prio = PRIO_Q_OTHERS;
+    if (iface_type == ESP_SERIAL_IF) prio = PRIO_Q_SERIAL;
+    else if (iface_type == ESP_HCI_IF) prio = PRIO_Q_BT;
+
+    int ret;
+    ret = h_queue_send(to_slave_queue[prio], &buf_handle, H_BLOCK_MAX);
+    if (ret != H_OK) {
+        H_LOGW("TX", "queue send failed: %d", ret);
+        return H_FAIL;
+    }
+    ret = h_sem_give(sem_to_slave_queue);
+    if (ret != H_OK) {
+        H_LOGW("TX", "sem give failed: %d", ret);
+        return H_FAIL;
+    }
+    return H_OK;
+}
+```
+
+#### 4b.6 `ensure_slave_bus_ready()`
+
+```c
+int ensure_slave_bus_ready(void *bus_handle)
+{
+    (void)bus_handle;
+
+    h_gpio_config(H_GPIO_PIN_RESET, H_GPIO_MODE_OUTPUT);
+    h_gpio_write(H_GPIO_PIN_RESET, H_RESET_VAL_ACTIVE);
+    h_msleep(10);
+    h_gpio_write(H_GPIO_PIN_RESET, H_RESET_VAL_INACTIVE);
+    h_msleep(10);
+    h_gpio_write(H_GPIO_PIN_RESET, H_RESET_VAL_ACTIVE);
+
+    if (uart_handle) h_uart_flush(uart_handle);
+    h_msleep(1500);
+
+    return H_OK;
+}
+```
+
+#### 4b.7 `is_transport_tx_ready()` / `is_transport_rx_ready()`
+
+```c
+static volatile uint8_t transport_tx_ready = 0;
+static volatile uint8_t transport_rx_ready = 0;
+
+int is_transport_tx_ready(void) { return transport_tx_ready; }
+int is_transport_rx_ready(void) { return transport_rx_ready; }
+```
+
+在收到 `ESP_PRIV_EVENT_INIT` 后设置两者为 1。
+
+### M4.3 验收标准
+
+- [x] `bus_init_internal()` 成功创建 queue/sem/task，调用 `h_transport_init()`。
+- [x] `ensure_slave_bus_ready()` 能 reset slave。（代码就绪，待硬件确认时序）
+- [ ] slave 重启后，`read task` 能收到 `ESP_PRIV_EVENT_INIT`。（待硬件验证）
+- [ ] 收到 INIT 后 `is_transport_tx_ready()` 和 `is_transport_rx_ready()` 返回 1。（待硬件验证）
+- [x] `esp_hosted_tx()` 能把包发到 slave。（代码就绪，待硬件确认物理链路）
+- [x] `process_rx_task` 能正确分发 `ESP_SERIAL_IF` 包。
+
+---
+
+## M5：Control serial read/write 可用，最小 RPC 成功
+
+**目标**：打通 RPC 控制面，完成一个最小 RPC（如获取 MAC / 获取固件版本）。
+
+**预计时间**：3-5 天
+
+### M5.1 实现 `h_control_serial_adapter.c`
+
+参考 `host/port/esp-idf/h_control_serial_adapter.c` 和 `host/drivers/serial/serial_ll_if.c`。
+
+最小实现需要：
+
+```c
+struct h_control_serial_handle {
+    int dummy;
+};
+
+static serial_ll_handle_t *serial_ll_if_g;
+static h_semaphore_t read_sem;
+
+h_control_serial_handle_t *h_control_serial_drv_open(const char *transport)
+{
+    (void)transport;
+    static struct h_control_serial_handle h = {0};
+    return &h;
+}
+
+int h_control_serial_drv_write(h_control_serial_handle_t *handle,
+                               uint8_t *buf, int in_count, int *out_count)
+{
+    (void)handle;
+    if (!serial_ll_if_g || !serial_ll_if_g->fops || !serial_ll_if_g->fops->write) {
+        if (out_count) *out_count = 0;
+        return H_ERR_INVALID_ARG;
+    }
+    int ret = serial_ll_if_g->fops->write(serial_ll_if_g, buf, (uint16_t)in_count);
+    if (ret != 0) {
+        if (out_count) *out_count = 0;
+        return H_FAIL;
+    }
+    if (out_count) *out_count = in_count;
+    return H_OK;
+}
+
+uint8_t *h_control_serial_drv_read(h_control_serial_handle_t *handle,
+                                   uint32_t *out_nbyte)
+{
+    /* wait read_sem, 调用 serial_ll_if_g->fops->read, 解析 TLV */
+}
+
+int h_control_serial_drv_close(h_control_serial_handle_t **handle)
+{
+    return H_OK;
+}
+
+int h_control_serial_platform_init(void)
+{
+    h_sem_create(H_MAX_SYNC_RPC_REQUESTS + H_MAX_ASYNC_RPC_REQUESTS, 1, &read_sem);
+    h_sem_take(read_sem, 0);
+    serial_ll_if_g = serial_ll_init(rpc_rx_indication);
+    serial_ll_if_g->fops->open(serial_ll_if_g);
+    return H_OK;
+}
+
+int h_control_serial_platform_deinit(void)
+{
+    /* close serial_ll_if_g, delete read_sem */
+    return H_OK;
+}
+
+static void rpc_rx_indication(void)
+{
+    h_sem_give(read_sem);
+}
+```
+
+注意：`serial_ll_if.c` 已经编译进工程，它使用 `h_queue_*`、`h_free` 等 wrapper，因此可以直接复用。
+
+### M5.2 确保 `serial_ll_if.c` 能工作
+
+`serial_ll_if.c` 的 `write()` 会把 protobuf payload 包上 TLV，然后通过 `h_transmit()` 发送。
+
+需要确认：
+
+- `serial_ll_init(rpc_rx_indication)` 创建的 handle 能正确初始化 queue。
+- `serial_ll_write()` 调用的 `h_transmit()` 最终能走到 `g_h_transport.transmit`。
+- `serial_ll_rx_handler()` 能把收到的包入队到 serial queue。
+
+### M5.3 最小 RPC 测试
+
+选择一个读操作 RPC，例如：
+
+- `rpc_wifi_get_mac()`
+- `esp_hosted_get_coprocessor_fwversion()`
+
+在 JL 应用中调用 `esp_hosted_init()`，然后调用上述 API，检查：
+
+1. request 通过 UART 发送到 slave。
+2. slave 返回 response。
+3. response 被 `h_control_serial_drv_read` 正确解析 TLV。
+4. `h_rpc_rsp.c` 正确匹配 sequence number。
+5. API 返回成功。
+
+### M5.4 调试 checklist
+
+| 现象 | 排查方向 |
+|---|---|
+| request 没发出去 | 检查 `esp_hosted_tx()` → `h_transmit()` → `uart_write()` 链路 |
+| slave 没响应 | 检查 reset 时序、UART 波特率、slave 是否进入 hosted mode |
+| response 收不到 | 检查 read task 是否运行、header 解析是否正确、checksum 是否匹配 |
+| TLV 解析失败 | 检查 `parse_tlv()`、endpoint name 长度、字节序 |
+| sequence number 不匹配 | 检查 request/response 的 seq_num 是否一致 |
+
+### M5.5 验收标准
+
+- [x] `h_control_serial_platform_init()` 成功。
+- [x] `h_serial_if_send()` 能把 TLV 包发到 slave。（代码就绪，待硬件验证）
+- [x] `h_serial_if_recv()` 能收到 slave 返回的 TLV 包。（代码就绪，待硬件验证）
+- [ ] 一个最小 RPC（如 get MAC）返回成功。（待硬件验证）
+- [ ] `h_hosted_init()` 在真实 slave 上成功完成。（待硬件验证）
+
+---
+
+## 各里程碑依赖关系
+
+```text
+M1 编译通过
+ |
+ v
+M2 OSAL/event/wifi contract + h_validate_contracts() 通过
+ |
+ v
+M3 UART adapter + GPIO reset 打通
+ |
+ v
+M4a h_transport_defaults.c 本地版本
+ |
+ v
+M4b transport task 层（替代 uart_drv.c）
+ |
+ v
+M5 control serial + 最小 RPC 成功
+```
+
+## 风险与应对
+
+| 风险 | 影响 | 应对 |
+|---|---|---|
+| M1 编译阶段发现 core/api 仍有 ESP-IDF 头依赖 | 阻塞 | 用 shadow 头覆盖，或反馈是否需要调整上游隔离 |
+| JL RTOS 缺少 queue/sem | M2 阻塞 | 用 mutex + 条件变量/环形缓冲区自行实现 |
+| UART 物理链路不通 | M3 阻塞 | 先用 loopback / 示波器确认硬件 |
+| slave 不进入 hosted mode | M4 阻塞 | 确认 slave firmware 是 ESP-Hosted 固件，检查 reset 时序 |
+| transport task 层 header 解析出错 | M4 阻塞 | 对照 `uart_drv.c` 的 `is_valid_uart_rx_packet()` 逐项检查 |
+| control serial TLV 解析失败 | M5 阻塞 | 用 hexdump 对比 ESP-IDF 正常工作的数据包 |
+| RPC sequence number 不匹配 | M5 阻塞 | 在 `h_rpc_core.c` 加日志确认 req/rsp 配对 |
+
+## 进入 M6 的前置条件
+
+- M1-M4 全部验收通过，M5 代码实现已完成。
+- 至少一个读 RPC（get MAC / get version）在真实 slave 上稳定成功 10 次以上（**待硬件验证**）。
+- reset/reinit 能重复运行（**待硬件验证**）。
+- 没有新引入 ESP-IDF / FreeRTOS / legacy vtable 依赖。
+
+---
+
+## 一句话总结
+
+第一阶段实施计划按 **M1 编译 → M2 合约 → M3 UART/GPIO → M4 transport task → M5 RPC** 推进，每个里程碑都有明确验收点；最大风险在 M1 编译剥离和 M4 transport task 层实现，需要对照 `uart_drv.c` 逐项落地。

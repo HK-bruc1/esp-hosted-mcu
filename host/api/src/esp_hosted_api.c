@@ -156,16 +156,20 @@ int esp_hosted_deinit(void)
 	ESP_LOGI(TAG, "ESP-Hosted deinit\n");
 	rpc_unregister_event_callbacks();
 	ESP_ERROR_CHECK(remove_esp_wifi_remote_channels());
-	ESP_ERROR_CHECK(teardown_transport());
-	/* Single deinit path: h_hosted_deinit handles RPC, event, osal teardown.
-	 * rpc_deinit() is intentionally skipped — h_port_rpc_deinit() inside
-	 * h_hosted_deinit() already calls rpc_core_stop() + rpc_core_deinit(). */
-	h_hosted_deinit();
-	esp_hosted_init_done = 0;
+	/* Post the transport-down event BEFORE tearing down the event layer.
+	 * h_hosted_deinit() destroys the event registry, so any post after it
+	 * would be silently dropped. */
 	esp_hosted_transport_up = 0;
 	h_event_post(H_EVENT_HOSTED,
 			ESP_HOSTED_EVENT_TRANSPORT_DOWN,
 			NULL, 0);
+	/* Reverse init order: stop RPC and framework layers first so no RPC/event
+	 * thread can touch the UART while we tear down transport afterwards.
+	 * h_hosted_deinit already calls h_port_transport_deinit(), which in turn
+	 * calls teardown_transport(). Calling teardown_transport() here too would
+	 * double-teardown. */
+	h_hosted_deinit();
+	esp_hosted_init_done = 0;
 	return ESP_OK;
 }
 
