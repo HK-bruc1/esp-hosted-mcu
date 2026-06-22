@@ -45,6 +45,8 @@ ESP_HOSTED_SOURCES := \
     $(ESP_HOSTED_REL_DIR)/host/port/jl/h_transport_task.c \
     $(ESP_HOSTED_REL_DIR)/host/port/jl/h_transport_defaults.c \
     $(ESP_HOSTED_REL_DIR)/host/port/jl/h_control_serial_adapter.c \
+    $(ESP_HOSTED_REL_DIR)/host/port/jl/jl_hosted_app_init.c \
+    $(ESP_HOSTED_REL_DIR)/host/port/jl/jl_assert_stub.c \
     $(ESP_HOSTED_REL_DIR)/host/core/src/h_init.c \
     $(ESP_HOSTED_REL_DIR)/host/core/src/h_rpc_core.c \
     $(ESP_HOSTED_REL_DIR)/host/core/src/h_rpc_utils.c \
